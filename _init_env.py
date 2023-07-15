@@ -2,6 +2,7 @@ import os
 import datetime
 import wandb
 import yaml
+import torch
 
 credential = yaml.load(open('./credential.yml'), Loader=yaml.FullLoader)
 wandb.login(key=credential['wand']['key'])
@@ -18,3 +19,4 @@ os.mkdir(os.path.join(os.environ['LOG_DIR'], 'batch'))
 os.environ['VERBOSE'] = "0"
 os.environ['DEVICE'] = 'cuda:0'
 
+torch.backends.cudnn.benchmark = True

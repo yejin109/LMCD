@@ -13,22 +13,22 @@ parser.add_argument('--data_type', default='synthetic')
 parser.add_argument('--dataset', required=False)
 
 # Synthetic data
-parser.add_argument('--v', default=20000)
+parser.add_argument('--v', default=10)
 parser.add_argument('--dist', default='uniform')
 parser.add_argument('--seed', default=123)
-parser.add_argument('--n', default=128)
+parser.add_argument('--n', default=64)
 parser.add_argument('--D', default=10000)
 parser.add_argument('--test_ratio', default=0.01)
 parser.add_argument('--b', default=16)
-parser.add_argument('--p', default=.05)
+parser.add_argument('--p', default=.15)
 
 # train
 parser.add_argument('--lr', default=2e-5)
-parser.add_argument('--epochs', default=100)
+parser.add_argument('--epochs', default=10)
 parser.add_argument('--wd', default=1e-2)
 
 # Log
-parser.add_argument('--logging_steps', default=50)
+parser.add_argument('--logging_steps', default=100)
 parser.add_argument('--save_steps', default=1000)
 
 
