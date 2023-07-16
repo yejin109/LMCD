@@ -29,7 +29,7 @@ def masking_tokens(inputs, mask_prob):
     labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
     # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-    indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+    indices_replaced = torch.bernoulli(torch.full(labels.shape, 1.0)).bool() & masked_indices
     inputs[indices_replaced] = 0
     #
     # # 10% of the time, we replace masked input tokens with random word

@@ -9,17 +9,23 @@ class SynthDataGenerator:
 
         self.seed = None
         self.set_seed(_seed)
+        self.dist = _dist
         if _dist == 'uniform':
             self.generator = random.randint
+        elif _dist == 'SRS':
+            self.generator = random.choice
         else:
             assert False, f"Cannot support {_dist}"
 
     def gen(self, size):
-        return self.generator(low=1, high=self.vocab_size+1, size=size)
+        if self.dist == 'uniform':
+            return self.generator(low=1, high=self.vocab_size+1, size=size)
+        elif self.dist == 'SRS':
+            return self.generator(self.vocab_size, size=size, replace=False)
 
-    def set_seed(self, seed):
-        random.seed(seed)
-        self.seed = seed
+    def set_seed(self, _seed):
+        random.seed(_seed)
+        self.seed = _seed
 
 
 class SynthDataSet:

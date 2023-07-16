@@ -8,7 +8,7 @@ credential = yaml.load(open('./credential.yml'), Loader=yaml.FullLoader)
 wandb.login(key=credential['wand']['key'])
 
 os.environ['WANDB_ENTITY'] = 'yejin109/lmcd'
-os.environ['WANDB_PROJECT'] = 'IID'
+os.environ['WANDB_PROJECT'] = 'non IID'
 os.environ['WANDB_WATCH'] = 'all'
 os.environ['ITERATION_STEP'] = str(0)
 
