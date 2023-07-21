@@ -9,11 +9,11 @@ def custom_mlm_collator(inputs):
     batch = dict()
     batch['input_ids'], batch['labels'] = masking_tokens(agg, mask_prob)
 
-    iter_step = int(os.environ['ITERATION_STEP'])
-    if (iter_step+1) % 500 == 0:
-        torch.save(batch['input_ids'], f"{os.environ['LOG_DIR']}/batch/input_ids_{iter_step+1}.pt")
-        torch.save(batch['labels'], f"{os.environ['LOG_DIR']}/batch/labels_{iter_step+1}.pt")
-    os.environ['ITERATION_STEP'] = str(iter_step+1)
+    # iter_step = int(os.environ['ITERATION_STEP'])
+    # if (iter_step+1) % 500 == 0:
+    #     torch.save(batch['input_ids'], f"{os.environ['LOG_DIR']}/batch/input_ids_{iter_step+1}.pt")
+    #     torch.save(batch['labels'], f"{os.environ['LOG_DIR']}/batch/labels_{iter_step+1}.pt")
+    # os.environ['ITERATION_STEP'] = str(iter_step+1)
     return batch
 
 

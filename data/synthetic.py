@@ -1,4 +1,6 @@
+import math
 import torch
+import numpy as np
 import numpy.random as random
 from collections import defaultdict
 
@@ -10,7 +12,7 @@ class SynthDataGenerator:
         self.seed = None
         self.set_seed(_seed)
         self.dist = _dist
-        if _dist == 'uniform':
+        if _dist in ['uniform', 'addition', 'nonlinear']:
             self.generator = random.randint
         elif _dist == 'SRS':
             self.generator = random.choice
@@ -21,7 +23,17 @@ class SynthDataGenerator:
         if self.dist == 'uniform':
             return self.generator(low=1, high=self.vocab_size+1, size=size)
         elif self.dist == 'SRS':
-            return self.generator(self.vocab_size, size=size, replace=False)
+            return self.generator(np.arange(1, self.vocab_size+1, dtype=np.int32), size=size, replace=False)
+        elif self.dist == 'addition':
+            base = self.generator(low=1, high=self.vocab_size, size=math.ceil(size/2))
+            ans = np.cumsum(base)[len(base)-math.floor(size/2):]
+            return np.concatenate((base, ans))
+        elif self.dist == 'nonlinear':
+            base = self.generator(low=1, high=self.vocab_size, size=math.ceil(size / 2))
+            numerator = base[0]
+            denominator = base[1]
+            ans = np.ceil(base * numerator / denominator)
+            return np.concatenate((base, ans[:size-len(base)]))
 
     def set_seed(self, _seed):
         random.seed(_seed)
@@ -37,7 +49,7 @@ class SynthDataSet:
         self.gen()
 
     def gen(self):
-        self.data_dict['input_ids'] = torch.Tensor(list(map(lambda x: self.generator.gen(self.seq_len), range(self.size)))).long()
+        self.data_dict['input_ids'] = torch.Tensor(np.array(list(map(lambda x: self.generator.gen(self.seq_len), range(self.size))))).long()
 
     def get_data(self):
         return self.data_dict

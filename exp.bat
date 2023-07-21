@@ -1,60 +1,100 @@
-python main.py --seed 124 --p 0.01
-python main.py --seed 124 --p 0.15
-python main.py --seed 124 --p 0.5
-python main.py --seed 124 --p 0.75
-python main.py --seed 124 --p 0.9
-python main.py --seed 124 --p 0.99
-python main.py --seed 78647 --p 0.01
-python main.py --seed 78647 --p 0.15
-python main.py --seed 78647 --p 0.5
-python main.py --seed 78647 --p 0.75
-python main.py --seed 78647 --p 0.9
-python main.py --seed 78647 --p 0.99
-python main.py --seed 45157 --p 0.01
-python main.py --seed 45157 --p 0.15
-python main.py --seed 45157 --p 0.5
-python main.py --seed 45157 --p 0.75
-python main.py --seed 45157 --p 0.9
-python main.py --seed 45157 --p 0.99
-python main.py --seed 35735 --p 0.01
-python main.py --seed 35735 --p 0.15
-python main.py --seed 35735 --p 0.5
-python main.py --seed 35735 --p 0.75
-python main.py --seed 35735 --p 0.9
-python main.py --seed 35735 --p 0.99
-python main.py --seed 89453 --p 0.01
-python main.py --seed 89453 --p 0.15
-python main.py --seed 89453 --p 0.5
-python main.py --seed 89453 --p 0.75
-python main.py --seed 89453 --p 0.9
-python main.py --seed 89453 --p 0.99
-python main.py --seed 56142 --p 0.01
-python main.py --seed 56142 --p 0.15
-python main.py --seed 56142 --p 0.5
-python main.py --seed 56142 --p 0.75
-python main.py --seed 56142 --p 0.9
-python main.py --seed 56142 --p 0.99
-python main.py --seed 99783 --p 0.01
-python main.py --seed 99783 --p 0.15
-python main.py --seed 99783 --p 0.5
-python main.py --seed 99783 --p 0.75
-python main.py --seed 99783 --p 0.9
-python main.py --seed 99783 --p 0.99
-python main.py --seed 13737 --p 0.01
-python main.py --seed 13737 --p 0.15
-python main.py --seed 13737 --p 0.5
-python main.py --seed 13737 --p 0.75
-python main.py --seed 13737 --p 0.9
-python main.py --seed 13737 --p 0.99
-python main.py --seed 24799 --p 0.01
-python main.py --seed 24799 --p 0.15
-python main.py --seed 24799 --p 0.5
-python main.py --seed 24799 --p 0.75
-python main.py --seed 24799 --p 0.9
-python main.py --seed 24799 --p 0.99
-python main.py --seed 59767 --p 0.01
-python main.py --seed 59767 --p 0.15
-python main.py --seed 59767 --p 0.5
-python main.py --seed 59767 --p 0.75
-python main.py --seed 59767 --p 0.9
-python main.py --seed 59767 --p 0.99
+python main.py --dist addition --seed 124 --p 0.15
+python main.py --dist addition --seed 124 --p 0.5
+python main.py --dist addition --seed 124 --p 0.75
+python main.py --dist addition --seed 124 --p 0.9
+python main.py --dist addition --seed 124 --p 0.99
+python main.py --dist addition --seed 78647 --p 0.15
+python main.py --dist addition --seed 78647 --p 0.5
+python main.py --dist addition --seed 78647 --p 0.75
+python main.py --dist addition --seed 78647 --p 0.9
+python main.py --dist addition --seed 78647 --p 0.99
+python main.py --dist addition --seed 45157 --p 0.15
+python main.py --dist addition --seed 45157 --p 0.5
+python main.py --dist addition --seed 45157 --p 0.75
+python main.py --dist addition --seed 45157 --p 0.9
+python main.py --dist addition --seed 45157 --p 0.99
+python main.py --dist addition --seed 35735 --p 0.15
+python main.py --dist addition --seed 35735 --p 0.5
+python main.py --dist addition --seed 35735 --p 0.75
+python main.py --dist addition --seed 35735 --p 0.9
+python main.py --dist addition --seed 35735 --p 0.99
+python main.py --dist addition --seed 89453 --p 0.15
+python main.py --dist addition --seed 89453 --p 0.5
+python main.py --dist addition --seed 89453 --p 0.75
+python main.py --dist addition --seed 89453 --p 0.9
+python main.py --dist addition --seed 89453 --p 0.99
+python main.py --dist addition --seed 56142 --p 0.15
+python main.py --dist addition --seed 56142 --p 0.5
+python main.py --dist addition --seed 56142 --p 0.75
+python main.py --dist addition --seed 56142 --p 0.9
+python main.py --dist addition --seed 56142 --p 0.99
+python main.py --dist addition --seed 99783 --p 0.15
+python main.py --dist addition --seed 99783 --p 0.5
+python main.py --dist addition --seed 99783 --p 0.75
+python main.py --dist addition --seed 99783 --p 0.9
+python main.py --dist addition --seed 99783 --p 0.99
+python main.py --dist addition --seed 13737 --p 0.15
+python main.py --dist addition --seed 13737 --p 0.5
+python main.py --dist addition --seed 13737 --p 0.75
+python main.py --dist addition --seed 13737 --p 0.9
+python main.py --dist addition --seed 13737 --p 0.99
+python main.py --dist addition --seed 24799 --p 0.15
+python main.py --dist addition --seed 24799 --p 0.5
+python main.py --dist addition --seed 24799 --p 0.75
+python main.py --dist addition --seed 24799 --p 0.9
+python main.py --dist addition --seed 24799 --p 0.99
+python main.py --dist addition --seed 59767 --p 0.15
+python main.py --dist addition --seed 59767 --p 0.5
+python main.py --dist addition --seed 59767 --p 0.75
+python main.py --dist addition --seed 59767 --p 0.9
+python main.py --dist addition --seed 59767 --p 0.99
+python main.py --dist nonlinear --seed 124 --p 0.15
+python main.py --dist nonlinear --seed 124 --p 0.5
+python main.py --dist nonlinear --seed 124 --p 0.75
+python main.py --dist nonlinear --seed 124 --p 0.9
+python main.py --dist nonlinear --seed 124 --p 0.99
+python main.py --dist nonlinear --seed 78647 --p 0.15
+python main.py --dist nonlinear --seed 78647 --p 0.5
+python main.py --dist nonlinear --seed 78647 --p 0.75
+python main.py --dist nonlinear --seed 78647 --p 0.9
+python main.py --dist nonlinear --seed 78647 --p 0.99
+python main.py --dist nonlinear --seed 45157 --p 0.15
+python main.py --dist nonlinear --seed 45157 --p 0.5
+python main.py --dist nonlinear --seed 45157 --p 0.75
+python main.py --dist nonlinear --seed 45157 --p 0.9
+python main.py --dist nonlinear --seed 45157 --p 0.99
+python main.py --dist nonlinear --seed 35735 --p 0.15
+python main.py --dist nonlinear --seed 35735 --p 0.5
+python main.py --dist nonlinear --seed 35735 --p 0.75
+python main.py --dist nonlinear --seed 35735 --p 0.9
+python main.py --dist nonlinear --seed 35735 --p 0.99
+python main.py --dist nonlinear --seed 89453 --p 0.15
+python main.py --dist nonlinear --seed 89453 --p 0.5
+python main.py --dist nonlinear --seed 89453 --p 0.75
+python main.py --dist nonlinear --seed 89453 --p 0.9
+python main.py --dist nonlinear --seed 89453 --p 0.99
+python main.py --dist nonlinear --seed 56142 --p 0.15
+python main.py --dist nonlinear --seed 56142 --p 0.5
+python main.py --dist nonlinear --seed 56142 --p 0.75
+python main.py --dist nonlinear --seed 56142 --p 0.9
+python main.py --dist nonlinear --seed 56142 --p 0.99
+python main.py --dist nonlinear --seed 99783 --p 0.15
+python main.py --dist nonlinear --seed 99783 --p 0.5
+python main.py --dist nonlinear --seed 99783 --p 0.75
+python main.py --dist nonlinear --seed 99783 --p 0.9
+python main.py --dist nonlinear --seed 99783 --p 0.99
+python main.py --dist nonlinear --seed 13737 --p 0.15
+python main.py --dist nonlinear --seed 13737 --p 0.5
+python main.py --dist nonlinear --seed 13737 --p 0.75
+python main.py --dist nonlinear --seed 13737 --p 0.9
+python main.py --dist nonlinear --seed 13737 --p 0.99
+python main.py --dist nonlinear --seed 24799 --p 0.15
+python main.py --dist nonlinear --seed 24799 --p 0.5
+python main.py --dist nonlinear --seed 24799 --p 0.75
+python main.py --dist nonlinear --seed 24799 --p 0.9
+python main.py --dist nonlinear --seed 24799 --p 0.99
+python main.py --dist nonlinear --seed 59767 --p 0.15
+python main.py --dist nonlinear --seed 59767 --p 0.5
+python main.py --dist nonlinear --seed 59767 --p 0.75
+python main.py --dist nonlinear --seed 59767 --p 0.9
+python main.py --dist nonlinear --seed 59767 --p 0.99

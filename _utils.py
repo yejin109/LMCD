@@ -1,6 +1,7 @@
 import os
 import wandb
 from transformers.integrations import WandbCallback
+from transformers.trainer import TrainerState, TrainingArguments, TrainerControl
 
 
 class CustomWandbCallback(WandbCallback):
