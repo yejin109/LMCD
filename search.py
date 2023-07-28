@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 import argparse
 from transformers import AutoTokenizer
@@ -13,10 +14,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--model_type', default="bert-base-cased")
 parser.add_argument('--data_type', default='huggingface')
 parser.add_argument('--data', default='imdb')
-parser.add_argument('--p', type=float, default=.2)
+parser.add_argument('--p', type=float, default=.4)
 
 parser.add_argument('--chunk_size', type=int, default=128)
-parser.add_argument('--window_size', type=int, default=5)
+parser.add_argument('--window_size', type=int, default=33)
+parser.add_argument('--search_iter', type=int, default=3)
 
 
 def tokenize_function(examples, _tokenizer=None):
@@ -46,33 +48,51 @@ def group_texts(examples, _chunk_size=None):
     return result
 
 
-def search_possible(_input_ids, masking_p, window_size):
-    if not isinstance(_input_ids, np.ndarray):
-        dat = np.array(_input_ids)
-    else:
-        dat = _input_ids.astype(dtype=np.uint32)
+def search_possible(_input_ids, masking_p, window_size, tk, output: defaultdict):
+    dat = torch.Tensor(_input_ids)
+    window_shape = (window_size, )
 
-    window_shape = (window_size, 1)
-
+    labels = dat.clone()
     # Masking 한 것에서 보는 걸로
-    mask = np.random.binomial(n=1, p=masking_p, size=dat.shape[0]*dat.shape[1]).reshape(dat.shape)
-    labels = dat.copy()
+    probability_matrix = torch.full(labels.shape, masking_p)
+    special_tokens_mask = [
+        tk.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+    ]
+    special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
+    probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
+    masked_indices = torch.bernoulli(probability_matrix).bool()
+
+    mask = masked_indices.cpu().numpy()
+    # mask = np.random.binomial(n=1, p=masking_p, size=dat.shape[0]*dat.shape[1]).reshape(dat.shape)
+    # skip_num = int(np.floor(window_size/2))
+    skip_num = 4
+
     labels[mask == 0] = 0
     dat[mask == 1] = 0
 
-    label_window = np.lib.stride_tricks.sliding_window_view(labels, window_shape).squeeze(-1)
+    labels = labels.cpu().numpy().astype(int)
+    dat = dat.cpu().numpy().astype(int)
+    special_tokens_mask = special_tokens_mask.cpu().numpy()
+
+    label_window = np.lib.stride_tricks.sliding_window_view(labels, window_shape, -1)[:, ::skip_num, :]
     label_window = label_window.reshape((-1, window_size))
+    # label_window = labels
 
-    data_window = np.lib.stride_tricks.sliding_window_view(dat, window_shape).squeeze(-1)
+    data_window = np.lib.stride_tricks.sliding_window_view(dat, window_shape, -1)[:, ::skip_num, :]
     data_window = data_window.reshape((-1, window_size))
+    # data_window = dat
 
-    res = defaultdict(list)
+    special_tokens_mask_window = np.lib.stride_tricks.sliding_window_view(special_tokens_mask, window_shape, -1)[:, ::skip_num, :]
+    special_tokens_mask_window = special_tokens_mask_window.reshape((-1, window_size))
+
     print(f"Chunk num : {len(label_window)}")
-    for data, label in tqdm(zip(data_window, label_window)):
+    for data, label, special_token in tqdm(zip(data_window, label_window, special_tokens_mask_window)):
         if (label.sum() == 0) or (data.sum() == 0):
             continue
-        res[tuple(data[data != 0])].extend(label[label != 0].tolist())
-    return res
+        data = data[~special_token]
+        label = label[~special_token]
+        output[tuple(sorted(np.unique(data[(data != 0)]).tolist()))].update(label[label != 0].tolist())
+    return output
 
 
 if __name__ == '__main__':
@@ -90,8 +110,14 @@ if __name__ == '__main__':
                                          fn_kwargs={'_chunk_size': chunk_size})
     # input_ids : (Chunk 개수, chunk size) = (D, 256)
 
-    masked_data = search_possible(lm_datasets['input_ids'], masking_p=args.p, window_size=args.window_size)
-    dist = list(map(lambda x: len(x), masked_data.values()))
-
-    with open(f'./results/{args.data}_chunk{args.chunk_size}_p{int(args.p*100)}.pkl', 'wb') as f:
+    masked_data = defaultdict(set)
+    for i in range(args.search_iter):
+        print(f"{i+1}th started")
+        masked_data = search_possible(lm_datasets['input_ids'],
+                                      masking_p=args.p,
+                                      window_size=args.window_size,
+                                      tk=tokenizer,
+                                      output=masked_data)
+        print(f"Key num : {len(masked_data)}")
+    with open(f'./results/{args.data}_window{args.window_size}_chunk{args.chunk_size}_p{int(args.p*100)}.pkl', 'wb') as f:
         pickle.dump(masked_data, f)

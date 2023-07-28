@@ -6,18 +6,19 @@ from accelerate import init_empty_weights
 import random
 
 import torch
-from data import get_dataset, get_data, custom_mlm_collator
+from data import get_dataset, get_data, CustomMLMCollator
 from _utils import CustomWandbCallback
 from custom_trainer import MLMTrainer
 import numpy as np
-from transformers import AutoModelForMaskedLM, TrainingArguments, Trainer, AutoConfig
+from transformers import AutoModelForMaskedLM, TrainingArguments, Trainer, AutoConfig, AutoTokenizer
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score, mutual_info_score
+from transformers import DataCollatorForLanguageModeling
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_type', default="bert-base-cased")
-parser.add_argument('--data_type', default='synthetic')
-parser.add_argument('--dataset', required=False)
+parser.add_argument('--data_type', default='huggingface')
+parser.add_argument('--data', default='imdb', required=False)
 
 # Synthetic data
 parser.add_argument('--v', default=2, type=int)
@@ -27,77 +28,83 @@ parser.add_argument('--dist', default='SRS',
 parser.add_argument('--seed', default=123, type=int)
 parser.add_argument('--n', default=10, type=int)
 parser.add_argument('--D', default=10000)
-parser.add_argument('--test_ratio', default=0.01)
-parser.add_argument('--b', default=16, type=int)
-parser.add_argument('--p', default=.50, type=float)
+parser.add_argument('--p', default=.20, type=float)
 
+parser.add_argument('--chunk_size', default=64, type=int)
 # train
+parser.add_argument('--test_ratio', type=float, default=0.001)
 parser.add_argument('--lr', default=2e-5)
 parser.add_argument('--epochs', default=30)
 parser.add_argument('--wd', default=1e-2)
+parser.add_argument('--max_steps', type=int, default=1000)
+
+parser.add_argument('--b_train', default=2, type=int)
+parser.add_argument('--b_eval', default=2, type=int)
 
 # Log
 parser.add_argument('--logging_steps', default=10)
 parser.add_argument('--save_steps', default=1000)
 
 
-def train(_model, _dataset, _train_args):
+def train(_model, _dataset, _train_args, _tk):
     training_args = TrainingArguments(
         output_dir=os.environ['LOG_DIR'],
-        evaluation_strategy="steps", # candidates : steps, epochs
-        run_name=os.environ['EXP_NAME']+'-'.join(['', os.environ['MASKING_P'], str(args.seed), str(args.n), str(args.v)]),
+        evaluation_strategy="steps",  # candidates : steps, epochs
+        run_name=os.environ['EXP_NAME'] + '-'.join(
+            ['', os.environ['MASKING_P'], str(args.seed), str(args.n), str(args.v)]),
         **_train_args,
     )
 
-    trainer = MLMTrainer(
-        model=_model,
-        args=training_args,
-        train_dataset=_dataset["train"],
-        eval_dataset=_dataset["test"],
-        data_collator=custom_mlm_collator,
-        compute_metrics=compute_metrics,
-    )
-    # trainer = Trainer(
+    mlm_collator = CustomMLMCollator(_tk, args.p)
+    # trainer = MLMTrainer(
     #     model=_model,
     #     args=training_args,
     #     train_dataset=_dataset["train"],
     #     eval_dataset=_dataset["test"],
     #     data_collator=custom_mlm_collator,
     #     compute_metrics=compute_metrics,
-    #
     # )
+    sharding_size = 600
+    trainer = Trainer(
+        model=_model,
+        args=training_args,
+        train_dataset=_dataset["train"],
+        eval_dataset=_dataset["test"].shard(num_shards=sharding_size, index=np.random.randint(0, sharding_size, size=1)),
+        data_collator=mlm_collator,
+        compute_metrics=compute_metrics,
+
+    )
     trainer.add_callback(CustomWandbCallback)
 
     trainer.train()
 
 
-# def compute_metrics(eval_preds):
-#     logits, labels = eval_preds
-#     logits = logits[:, :, 1:int(os.environ['VOCAB_SIZE'])+1]
-#
-#     labels = labels.reshape(-1)
-#     logits = logits.reshape(-1, logits.shape[-1])
-#     weights = logits
-#     # weights = logits/logits.sum(-1, keepdims=True)
-#
-#     # preds = np.array(list(map(lambda x: random.choices(list(range(1, int(os.environ['VOCAB_SIZE'])+1)), weights=x), weights.tolist()))).reshape(-1)
-#     preds = np.argmax(logits, -1)
-#
-#     mask = labels != -100
-#
-#     labels = labels[mask]
-#     preds = preds[mask]
-#
-#     # labels = np.sort(labels)
-#     # preds = np.sort(preds)
-#
-#     res = {
-#         'P_err': 1 - accuracy_score(labels, preds),
-#         'logit_avg_all': logits.mean(-1).mean(),
-#         'logit_std_all': logits.std(-1).mean(),
-#     }
-#
-#     return res
+def tokenize_function(examples, _tokenizer=None):
+    result = _tokenizer(examples["text"])
+    if _tokenizer.is_fast:
+        result["word_ids"] = [result.word_ids(i) for i in range(len(result["input_ids"]))]
+    return result
+
+
+def group_texts(examples, _chunk_size=None):
+    # Concatenate all texts
+    concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+
+    # Compute length of concatenated texts
+    total_length = len(concatenated_examples[list(examples.keys())[0]])
+    # We drop the last chunk if it's smaller than chunk_size
+    total_length = (total_length // _chunk_size) * _chunk_size
+
+    # Split by chunks of max_len
+    result = {
+        k: [t[i: i + _chunk_size] for i in range(0, total_length, _chunk_size)]
+        for k, t in concatenated_examples.items()
+    }
+
+    # Create a new labels column
+    result["labels"] = result["input_ids"].copy()
+    return result
+
 
 def compute_metrics(eval_preds):
     preds, labels = eval_preds
@@ -118,7 +125,8 @@ if __name__ == '__main__':
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
     os.environ['VOCAB_SIZE'] = str(args.v)
     os.environ['SEQ_LEN'] = str(args.n)
-    os.environ['WANDB_PROJECT'] = args.dist + ' - theory'
+    # os.environ['WANDB_PROJECT'] = args.dist + ' - theory'
+    os.environ['WANDB_PROJECT'] = args.data
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
@@ -128,15 +136,49 @@ if __name__ == '__main__':
     os.mkdir(os.environ['LOG_DIR'])
     os.mkdir(os.path.join(os.environ['LOG_DIR'], 'batch'))
 
-    data = get_data((args.v, args.dist, args.n, args.D, args.b, args.seed))
-    dataset = get_dataset(args.data_type, data.get_data())
-    dataset.set_format(type='torch', columns=['input_ids'])
-    dataset = dataset.train_test_split(args.test_ratio)
+    np.random.seed(args.seed)
 
     model = AutoModelForMaskedLM.from_pretrained(args.model_type)
 
     train_args = {'learning_rate': args.lr, 'num_train_epochs': args.epochs, 'weight_decay': args.wd,
-                  'per_device_train_batch_size': args.b, 'per_device_eval_batch_size': 64,
+                  'per_device_train_batch_size': args.b_train, 'per_device_eval_batch_size': args.b_eval,
                   'do_eval': True, 'do_train': True,
+                  'max_steps': args.max_steps,
                   'logging_steps': args.logging_steps, 'save_steps': args.save_steps}
-    train(model, dataset, train_args)
+
+    if args.data_type == 'synthetic':
+        data = get_data((args.v, args.dist, args.n, args.D, args.b, args.seed))
+        dataset = get_dataset(args.data_type, data.get_data())
+        dataset.set_format(type='torch', columns=['input_ids'])
+        dataset = dataset.train_test_split(args.test_ratio)
+        tokenizer = None
+    elif args.data_type == 'huggingface':
+        dataset = get_dataset(args.data_type, args.data)
+        del dataset['unsupervised']
+        tokenizer = AutoTokenizer.from_pretrained(args.model_type)
+        tokenized_datasets = dataset.map(tokenize_function,
+                                         batched=True, remove_columns=["text", "label"],
+                                         fn_kwargs={'_tokenizer': tokenizer})
+        chunk_size = args.chunk_size
+        lm_datasets = tokenized_datasets.map(group_texts,
+                                             batched=True,
+                                             fn_kwargs={'_chunk_size': chunk_size})
+        lm_datasets.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+        # dataset = lm_datasets['train'].train_test_split(args.test_ratio)
+        dataset = lm_datasets
+        tokenized_datasets = None
+
+        # dataset = lm_datasets['train']
+        # samples = [dataset[i] for i in range(2)]
+        # data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
+        #
+        # for chunk in custom_mlm_collator(samples)["input_ids"]:
+        # for chunk in data_collator(samples)["input_ids"]:
+        #     print(f"\n'>>> {tokenizer.decode(chunk)}'")
+    else:
+        dataset = None
+        raise AssertionError(f"")
+
+    print(dataset)
+
+    train(model, dataset, train_args, tokenizer)

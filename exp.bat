@@ -1,1 +1,10 @@
-python main.py --dist SRS --v 6 --n 5 --p 0.8 --b 128 --model_type bert-large-uncased
+python main.py --model_type prajjwal1/bert-medium --seed 124 --p 0.6 --max_steps 1000 --b_train 2 --b_eval 2 --data imdb --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --seed 78647 --p 0.6 --max_steps 1000 --b_train 2 --b_eval 2 --data imdb --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --seed 45157 --p 0.6 --max_steps 1000 --b_train 2 --b_eval 2 --data imdb --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --seed 35735 --p 0.6 --max_steps 1000 --b_train 2 --b_eval 2 --data imdb --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --seed 89453 --p 0.6 --max_steps 1000 --b_train 2 --b_eval 2 --data imdb --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --seed 124 --p 0.8 --max_steps 1000 --b_train 2 --b_eval 2 --data imdb --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --seed 78647 --p 0.8 --max_steps 1000 --b_train 2 --b_eval 2 --data imdb --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --seed 45157 --p 0.8 --max_steps 1000 --b_train 2 --b_eval 2 --data imdb --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --seed 35735 --p 0.8 --max_steps 1000 --b_train 2 --b_eval 2 --data imdb --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --seed 89453 --p 0.8 --max_steps 1000 --b_train 2 --b_eval 2 --data imdb --chunk_size 64 --data_type huggingface
