@@ -1,19 +1,12 @@
-import _init_env
 import datetime
 import os
 import argparse
-from accelerate import init_empty_weights
-import random
 
-import torch
 from data import get_dataset, get_data, CustomMLMCollator
 from _utils import CustomWandbCallback
-from custom_trainer import MLMTrainer
 import numpy as np
-from transformers import AutoModelForMaskedLM, TrainingArguments, Trainer, AutoConfig, AutoTokenizer
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score, mutual_info_score
-from transformers import DataCollatorForLanguageModeling
-
+from transformers import AutoModelForMaskedLM, TrainingArguments, Trainer, AutoTokenizer
+from sklearn.metrics import accuracy_score
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_type', default="bert-base-cased")
