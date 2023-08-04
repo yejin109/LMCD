@@ -22,24 +22,25 @@ parser.add_argument('--seed', default=123, type=int)
 parser.add_argument('--n', default=10, type=int)
 parser.add_argument('--D', default=10000)
 parser.add_argument('--p', default=.20, type=float)
-
 parser.add_argument('--chunk_size', default=64, type=int)
+
 # train
-parser.add_argument('--test_ratio', type=float, default=0.001)
 parser.add_argument('--lr', default=2e-5)
 parser.add_argument('--epochs', default=30)
 parser.add_argument('--wd', default=1e-2)
 parser.add_argument('--max_steps', type=int, default=1000)
-
 parser.add_argument('--b_train', default=2, type=int)
+
+# Test
 parser.add_argument('--b_eval', default=2, type=int)
+parser.add_argument('--shard_eval', default=600, type=int)
 
 # Log
 parser.add_argument('--logging_steps', default=10)
 parser.add_argument('--save_steps', default=1000)
 
 
-def train(_model, _dataset, _train_args, _tk):
+def train(_model, _dataset, _train_args, _tk, sharding_size=600):
     training_args = TrainingArguments(
         output_dir=os.environ['LOG_DIR'],
         evaluation_strategy="steps",  # candidates : steps, epochs
@@ -49,15 +50,7 @@ def train(_model, _dataset, _train_args, _tk):
     )
 
     mlm_collator = CustomMLMCollator(_tk, args.p)
-    # trainer = MLMTrainer(
-    #     model=_model,
-    #     args=training_args,
-    #     train_dataset=_dataset["train"],
-    #     eval_dataset=_dataset["test"],
-    #     data_collator=custom_mlm_collator,
-    #     compute_metrics=compute_metrics,
-    # )
-    sharding_size = 600
+
     trainer = Trainer(
         model=_model,
         args=training_args,
@@ -147,20 +140,21 @@ if __name__ == '__main__':
         tokenizer = None
     elif args.data_type == 'huggingface':
         dataset = get_dataset(args.data_type, args.data)
-        del dataset['unsupervised']
+        if 'unsupervised' in dataset.keys():
+            del dataset['unsupervised']
         tokenizer = AutoTokenizer.from_pretrained(args.model_type)
         tokenized_datasets = dataset.map(tokenize_function,
-                                         batched=True, remove_columns=["text", "label"],
+                                         batched=True, remove_columns=list(dataset.features.keys()),
                                          fn_kwargs={'_tokenizer': tokenizer})
         chunk_size = args.chunk_size
         lm_datasets = tokenized_datasets.map(group_texts,
                                              batched=True,
                                              fn_kwargs={'_chunk_size': chunk_size})
         lm_datasets.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
-        # dataset = lm_datasets['train'].train_test_split(args.test_ratio)
         dataset = lm_datasets
         tokenized_datasets = None
 
+        # Masking test
         # dataset = lm_datasets['train']
         # samples = [dataset[i] for i in range(2)]
         # data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
@@ -174,4 +168,4 @@ if __name__ == '__main__':
 
     print(dataset)
 
-    train(model, dataset, train_args, tokenizer)
+    train(model, dataset, train_args, tokenizer, sharding_size=args.shard_eval)
