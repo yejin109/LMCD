@@ -8,7 +8,13 @@ def get_dataset(_data_type, data=None):
     if _data_type == 'synthetic':
         return Dataset.from_dict(data)
     elif _data_type == 'huggingface':
-        return load_dataset(data)
+        if data == 'wikipedia':
+            res = load_dataset(data, '20220301.en')
+            res = res.remove_columns(["id", 'title', 'url'])
+            return res
+        else:
+            return load_dataset(data)
+
     else:
         raise AssertionError(f"Cannot support {_data_type}")
 

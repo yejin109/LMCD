@@ -6,3 +6,4 @@ logs
 wandb
 credential.yml
 results/*.pkl
+/cache/bookcorpus_train_data_10000000.npy

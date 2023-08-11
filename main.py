@@ -11,7 +11,10 @@ from sklearn.metrics import accuracy_score
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_type', default="bert-base-cased")
 parser.add_argument('--data_type', default='huggingface')
-parser.add_argument('--data', default='imdb', required=False)
+# parser.add_argument('--data', default='bookcorpus', required=False)
+parser.add_argument('--data', default='wikipedia', required=False)
+parser.add_argument('--use_partial_data', default=False, required=False)
+parser.add_argument('--partial_data_size', default=8, type=int, required=False)
 
 # Synthetic data
 parser.add_argument('--v', default=2, type=int)
@@ -140,11 +143,13 @@ if __name__ == '__main__':
         tokenizer = None
     elif args.data_type == 'huggingface':
         dataset = get_dataset(args.data_type, args.data)
+        if args.use_partial_data:
+            dataset['train'] = dataset['train'].shard(args.partial_data_size, index=0)
         if 'unsupervised' in dataset.keys():
             del dataset['unsupervised']
         tokenizer = AutoTokenizer.from_pretrained(args.model_type)
         tokenized_datasets = dataset.map(tokenize_function,
-                                         batched=True, remove_columns=list(dataset.features.keys()),
+                                         batched=True, remove_columns=list(dataset['train'].features.keys()),
                                          fn_kwargs={'_tokenizer': tokenizer})
         chunk_size = args.chunk_size
         lm_datasets = tokenized_datasets.map(group_texts,
@@ -154,14 +159,9 @@ if __name__ == '__main__':
         dataset = lm_datasets
         tokenized_datasets = None
 
-        # Masking test
-        # dataset = lm_datasets['train']
-        # samples = [dataset[i] for i in range(2)]
-        # data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
-        #
-        # for chunk in custom_mlm_collator(samples)["input_ids"]:
-        # for chunk in data_collator(samples)["input_ids"]:
-        #     print(f"\n'>>> {tokenizer.decode(chunk)}'")
+        if isinstance(dataset, dict) and ('test' not in dataset.keys()):
+            dataset = dataset['train'].train_test_split(0.01)
+
     else:
         dataset = None
         raise AssertionError(f"")
