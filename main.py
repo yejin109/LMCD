@@ -11,9 +11,9 @@ from sklearn.metrics import accuracy_score
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_type', default="bert-base-cased")
 parser.add_argument('--data_type', default='huggingface')
-# parser.add_argument('--data', default='bookcorpus', required=False)
-parser.add_argument('--data', default='wikipedia', required=False)
-parser.add_argument('--use_partial_data', default=False, required=False)
+parser.add_argument('--data', default='bookcorpus', required=False)
+# parser.add_argument('--data', default='wikipedia', required=False)
+parser.add_argument('--use_partial_data', default=True, required=False)
 parser.add_argument('--partial_data_size', default=8, type=int, required=False)
 
 # Synthetic data
@@ -24,7 +24,7 @@ parser.add_argument('--dist', default='SRS',
 parser.add_argument('--seed', default=123, type=int)
 parser.add_argument('--n', default=10, type=int)
 parser.add_argument('--D', default=10000)
-parser.add_argument('--p', default=.20, type=float)
+parser.add_argument('--p', default=.60, type=float)
 parser.add_argument('--chunk_size', default=64, type=int)
 
 # train
@@ -167,5 +167,4 @@ if __name__ == '__main__':
         raise AssertionError(f"")
 
     print(dataset)
-
     train(model, dataset, train_args, tokenizer, sharding_size=args.shard_eval)

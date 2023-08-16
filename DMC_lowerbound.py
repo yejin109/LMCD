@@ -90,7 +90,7 @@ def group_texts(examples, _chunk_size=None):
     return result
 
 
-def compute_lb(p, _dist: dict, data):
+def compute_lb(p, _dist: dict, data, method='org'):
     dist = defaultdict(int)
     dist.update(_dist)
 
@@ -202,19 +202,66 @@ def compute_lb(p, _dist: dict, data):
 
     # Ver 4
     dmc_factor = (p ** p * (1 - p) ** (1 - p))
-    masked = torch.bernoulli(torch.full((len(data),), p)).bool().cpu().numpy()
+    # masked = torch.bernoulli(torch.full((len(data),), p)).bool().cpu().numpy()
+    mask = list(map(lambda x: torch.bernoulli(torch.full(x.shape, p)).bool().cpu().numpy(), data))
 
-    ratio = np.array(list(map(lambda x: dist[x[0]]/p, data)))[:, np.newaxis]
-    # ratio = np.concatenate((np.ones((len(data), 1))*(1/(1-p)), ratio), axis=1)
-    ratio = np.concatenate((np.clip(np.ones((len(data), 1))*(1/(1-p)), 0, 1/p), ratio), axis=1)
-    ratio = np.array([ratio[i, int(m)] for i, m in enumerate(masked)])
-    res = 1 - np.mean(dmc_factor * ratio)
+    p_val = min(1/(1-p), 1/dmc_factor)
+    # masked_val = list(map(lambda x: np.array(list(map(lambda y: dist[y], x))) / p, data))
+    masked_val = list(map(lambda x: np.array(list(map(lambda y: dist[y], x))) * np.clip(1/p, 0, 1/(1-p)), data))
+    # masked_val = list(map(lambda x: np.array(list(map(lambda y: dist[y], x))) * min(1/p, 1/dmc_factor), data))
 
-    # log = [f'{p} DONE']
-    # log.append(f'Res {res:.4f}')
-    # log.append(f'DMC {dmc_factor:.4f}')
-    # log.append(f'ratio {np.mean(ratio):.4f}')
-    # print("\n\t".join(log))
+    ratio = list(map(lambda m, m_val: m.astype(int) * m_val + (~m).astype(int) * np.clip(1/(1-p), 0, 1/p), mask, masked_val))
+    # ratio = [m.astype(int) * m_val + (~m).astype(int) * 1 / (1 - p) for m, m_val in zip(mask, masked_val)]
+    # ratio = [m.astype(int) * m_val + (~m).astype(int) * min(1/(1-p), 1/dmc_factor) for m, m_val in zip(mask, masked_val)]
+
+    if method == 'org':
+        masked_val = list(map(lambda x: np.array(list(map(lambda y: dist[y], x))) / p, data))
+        ratio = [m.astype(int) * m_val + (~m).astype(int) * 1 / (1 - p) for m, m_val in zip(mask, masked_val)]
+        ratio = list(map(lambda x: x[0], ratio))
+        # masked_val = np.array(list(map(lambda x: dist[x[0]]/p, data)))
+        # masked_val = list(map(lambda x: np.array(list(map(lambda y: dist[y], x)))/p, data))
+        # ratio = [np.prod(m.astype(int) * m_val + (~m).astype(int) * 1/(1-p)) for m, m_val in zip(mask, masked_val)]
+        # ratio = np.concatenate((np.ones((len(data), 1))*(1/(1-p)), ratio), axis=1)
+        # ratio = np.array([ratio[i, int(m)] for i, m in enumerate(mask)])
+        # ratio = [m.astype(int) * m_val + (~m).astype(int) * 1 / (1 - p) for m, m_val in zip(mask, masked_val)]
+    elif method == 'clip-half':
+        ratio = np.array(list(map(lambda x: dist[x[0]]/p, data)))[:, np.newaxis]
+        ratio = np.concatenate((np.clip(np.ones((len(data), 1))*(1/(1-p)), 0, 1/p), ratio), axis=1)
+    elif method == 'clip-all':
+        masked_val = list(map(lambda x: np.array(list(map(lambda y: dist[y], x))) * np.clip(1/p, 0, 1/(1-p)), data))
+        ratio = list(map(lambda m, m_val: m.astype(int) * m_val + (~m).astype(int) * np.clip(1/(1-p), 0, 1/p), mask, masked_val))
+        ratio = list(map(lambda x: x[0], ratio))
+        # ratio = list(map(lambda x: np.prod(x), ratio))
+        # ratio = list(map(lambda x, m: np.prod(x[:math.ceil(len(mask)*p)]), ratio, mask))
+        # masked_val = list(map(lambda x: np.array(list(map(lambda y: dist[y], x)))/p, data))
+        # ratio = [np.prod(m.astype(int) * m_val + (~m).astype(int) * 1/(1-p)) for m, m_val in zip(mask, masked_val)]
+
+        # ratio = np.array(list(map(lambda x: dist[x[0]], data)))[:, np.newaxis] * p_val
+        # ratio = np.array(list(map(lambda x: np.array(list(map(lambda y: dist[y], x))), data)))[:, np.newaxis]
+        # # ratio = ratio * np.clip(np.ones((len(ratio), 1))*(1/p), 0, 1/(1-p))
+        # # ratio = np.concatenate((np.clip(np.ones((len(data), 1)) * (1 / (1 - p)), 0, 1 / p), ratio), axis=1)
+        # ratio = np.concatenate((np.ones((len(data), 1))*p_val, ratio), axis=1)
+        # ratio = np.array([ratio[i, int(m)] for i, m in enumerate(masked)])
+    else:
+        ratio = None
+    ratio = np.array(ratio).mean()
+
+    # ratio = 1
+    # ratio = max(1, ratio)
+    # ratio = np.clip(ratio, a_min=1, a_max=None)
+    res = 1 - dmc_factor * ratio
+    # res = min(res, dmc_factor)
+    # ratio = np.array(list(map(lambda x: dist[x[0]]/p, data)))[:, np.newaxis]
+    # # ratio = np.concatenate((np.ones((len(data), 1))*(1/(1-p)), ratio), axis=1)
+    # ratio = np.concatenate((np.clip(np.ones((len(data), 1))*(1/(1-p)), 0, 1/p), ratio), axis=1)
+    # ratio = np.array([ratio[i, int(m)] for i, m in enumerate(masked)])
+    # res = 1 - np.mean(dmc_factor * ratio)
+
+    log = [f'{p} DONE']
+    log.append(f'Res {res:.4f}')
+    log.append(f'DMC {dmc_factor:.4f}')
+    log.append(f'ratio {np.mean(ratio):.4f}')
+    print("\n\t".join(log))
     return res
 
 
@@ -223,7 +270,7 @@ def get_exp_data(_ps):
         if 'bert-large-uncased' in name:
             return 'bert-large-uncased'
         elif 'bert-base-cased' in name:
-            return 'ber-base-cased'
+            return 'bert-base-cased'
         elif 'medium' in name:
             return 'prajjwal1/bert-medium'
         elif 'mini' in name:
@@ -279,14 +326,18 @@ def visualize(_ps, _data):
         for idx in _data[p].index:
             points[idx].append(_data[p][idx])
 
-    plt.figure()
-    plt.plot(mask_p, lower_bound, label='Lower Bound')
+    plt.figure(figsize=(7, 7))
+    plt.plot(mask_p, lower_bound, label='Lower Bound Org')
+    plt.plot(mask_p, lower_bound_clip, label='Lower Bound Clip')
     for idx, vals in points.items():
         plt.scatter([float(p[1:]) / 100 for p in _ps], vals, label=idx, c=get_color(idx), s=get_size(idx), alpha=0.5)
     plt.xlabel('Masking Probability', fontdict=font_dict)
     plt.ylabel('Perr', fontdict=font_dict)
     plt.ylim(0, 1)
+    plt.xlim(0, 1)
     plt.legend()
+    plt.title(args.data, fontdict=font_dict)
+    plt.tight_layout()
     plt.savefig(f'{args.data}_lowerbound.png')
     plt.show()
 
@@ -311,6 +362,53 @@ def get_dist(_data: list):
     return cnt_map
 
 
+def generate_table(_ps, _data, _lower_bound):
+    def get_p_idx(target_p):
+        return np.argmin(np.abs(np.arange(0.01, 0.99, step=0.01)-target_p))
+
+    def bold_char(char):
+        return "\\textbf{" + char + "}"
+
+    def get_line(model_name):
+        _res = [bold_char(model_name)] + lines[name_to_key[model_name]]
+        return ' & '.join(_res) + " \\\\ \midrule"
+
+    name_to_key = {
+        "BERT-tiny": "prajjwal1/bert-tiny",
+        "BERT-mini": 'prajjwal1/bert-mini',
+        "BERT-medium": 'prajjwal1/bert-medium',
+        "BERT-base": 'bert-base-cased',
+        "BERT-large": 'bert-large-uncased',
+        "Lower Bound": "Lower Bound"
+    }
+
+    prefix = [
+        "\\begin{table}[hbt!]",
+        "\\begin{tabular}{@{}ccccc@{}}",
+        "\\toprule"
+    ]
+    suffix = [
+        "\end{tabular}",
+        "\end{table}"
+    ]
+
+    lines = defaultdict(list)
+    body = ["Masking Probability"]
+    for p in _ps:
+        _mask_p = float(p[1:])/100
+        for idx in _data[p].index:
+            lines[idx].append(f"{_data[p][idx]:.4f}")
+        lines['Lower Bound'].append(f"{_lower_bound[get_p_idx(_mask_p)]: .4f}")
+        body.append(str(_mask_p))
+    body = [" & ".join(body)+"\\\\ \midrule"]
+
+    order = ["BERT-tiny", "BERT-mini", "BERT-medium", "BERT-base", "BERT-large", "Lower Bound"]
+    body = body + [get_line(m) for m in order]
+    res = prefix + body + suffix
+    res = "\n".join(res)
+    return res
+
+
 if __name__ == '__main__':
     args = parser.parse_args()
     font_dict = {'fontsize': args.fsize}
@@ -327,7 +425,12 @@ if __name__ == '__main__':
     mask_p = np.arange(0.01, 0.99, step=0.01).tolist()
 
     lower_bound = list(map(lambda x: compute_lb(x, token_dist, train_data), mask_p))
+    lower_bound_clip = list(map(lambda x: compute_lb(x, token_dist, train_data, method='clip-all'), mask_p))
+    # lower_bound_half = list(map(lambda x: compute_lb(x, token_dist, train_data, method='clip-half'), mask_p))
 
     ps = ['p20', 'p40', 'p60', 'p80']
     data = get_exp_data(ps)
     visualize(ps, data)
+
+    latex_table = generate_table(ps, data, lower_bound_clip)
+    print(latex_table)
