@@ -11,8 +11,7 @@ from sklearn.metrics import accuracy_score
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_type', default="bert-base-cased")
 parser.add_argument('--data_type', default='huggingface')
-parser.add_argument('--data', default='bookcorpus', required=False)
-# parser.add_argument('--data', default='wikipedia', required=False)
+parser.add_argument('--data', default='bookcorpus', required=False, help='default bookcorpus, wikipedia')
 parser.add_argument('--use_partial_data', default=True, required=False)
 parser.add_argument('--partial_data_size', default=8, type=int, required=False)
 
@@ -36,11 +35,11 @@ parser.add_argument('--b_train', default=2, type=int)
 
 # Test
 parser.add_argument('--b_eval', default=2, type=int)
-parser.add_argument('--shard_eval', default=600, type=int)
+parser.add_argument('--shard_eval', default=300, type=int)
 
 # Log
-parser.add_argument('--logging_steps', default=10)
-parser.add_argument('--save_steps', default=1000)
+parser.add_argument('--logging_steps', type=int, default=100)
+parser.add_argument('--save_steps', type=int, default=50000)
 
 
 def train(_model, _dataset, _train_args, _tk, sharding_size=600):
@@ -98,24 +97,26 @@ def group_texts(examples, _chunk_size=None):
 def compute_metrics(eval_preds):
     preds, labels = eval_preds
     preds = np.argmax(preds, -1)
+
+    mask = labels != -100
+    p_err = np.array(list(map(lambda p, l, m: ~ (p[m] == l[m]).all(), preds, labels, mask))).mean()
+
     preds = preds.reshape(-1)
     labels = labels.reshape(-1)
     mask = labels != -100
-
     labels = labels[mask]
     preds = preds[mask]
-
-    return {'P_err': 1 - accuracy_score(labels, preds)}
+    return {'P_err': p_err, 'Token_err': 1 - accuracy_score(labels, preds)}
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
+    os.environ['CACHE_DIR'] = './cache'
     os.environ['MASKING_P'] = str(args.p)
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
     os.environ['VOCAB_SIZE'] = str(args.v)
     os.environ['SEQ_LEN'] = str(args.n)
-    # os.environ['WANDB_PROJECT'] = args.dist + ' - theory'
-    os.environ['WANDB_PROJECT'] = args.data
+    os.environ['WANDB_PROJECT'] = args.data + ' - v2'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
