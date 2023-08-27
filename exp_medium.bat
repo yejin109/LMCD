@@ -1,0 +1,14 @@
+python main.py --model_type prajjwal1/bert-medium --p 0.6 --seed 78647 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.8 --seed 78647 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.2 --seed 45157 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.2 --seed 35735 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.2 --seed 89453 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.4 --seed 45157 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.4 --seed 35735 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.4 --seed 89453 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.6 --seed 45157 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.6 --seed 35735 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.6 --seed 89453 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.8 --seed 45157 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.8 --seed 35735 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface
+python main.py --model_type prajjwal1/bert-medium --p 0.8 --seed 89453 --max_steps 20000 --b_train 8 --b_eval 8 --shard_eval 300 --logging_steps 100 --data bookcorpus --chunk_size 64 --data_type huggingface

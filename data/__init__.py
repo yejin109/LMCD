@@ -2,7 +2,7 @@ import os
 from datasets import load_dataset
 from datasets import Dataset
 from .synthetic import SynthDataSet
-from .collator import custom_mlm_collator, CustomMLMCollator
+from .collator import CustomMLMCollator
 
 
 def get_dataset(_data_type, data=None):

@@ -510,37 +510,76 @@ def generate_metric_tab(_data, _lower_bound, _masking_p):
     return res
 
 
+def compute_ub(_p, _size, vocab_size):
+    # mask = torch.bernoulli(torch.full((_size, ), _p)).bool().cpu().numpy()
+    # _res = mask.astype(float)
+    # _res = _p ** _res * (1-_p)**(1-_res) * vocab_size**(_res -1 + _p)
+    # _res_log = np.log(_res) * 64
+    # _res = np.sum(_res_log)
+
+    _res = vocab_size**(_p) * _p ** _p * (1-_p) ** (1-_p)
+    _res = np.log(_res)
+    _res = _res * 1
+    return np.exp(_res)
+
+
 if __name__ == '__main__':
     args = parser.parse_args()
     font_dict = {'fontsize': args.fsize}
 
     train_data = get_data(args.data, args.model_type, chunk_size=args.n, maximum_size=args.dataset_max)
 
-    # token_dist = get_dist(train_data)
+    token_dist = get_dist(train_data)
 
-    # compute_lb(.2, args.n, token_dist, train_data, verbose=True)
-    # compute_lb(.4, args.n, token_dist, train_data, verbose=True)
-    # compute_lb(.6, args.n, token_dist, train_data, verbose=True)
-    # compute_lb(.8, args.n, token_dist, train_data, verbose=True)
+    # Lower Bound
+    # # compute_lb(.2, args.n, token_dist, train_data, verbose=True)
+    # # compute_lb(.4, args.n, token_dist, train_data, verbose=True)
+    # # compute_lb(.6, args.n, token_dist, train_data, verbose=True)
+    # # compute_lb(.8, args.n, token_dist, train_data, verbose=True)
+    #
+    # mask_p = np.arange(0.01, 0.99, step=0.01)
+    # # mask_p = np.arange(0.05, 0.95, step=0.05).tolist()
+    # lower_bound = []
+    # for i in tqdm.tqdm(range(100)):
+    #     lbs = list(map(lambda x: compute_lb(x, len(train_data)), mask_p))
+    #     lower_bound.append(lbs)
+    # lower_bound = np.array(lower_bound).mean(axis=0)
+    # # lower_bound = list(map(lambda x: compute_lb(x, token_dist, train_data), mask_p))
+    # # lower_bound_clip = list(map(lambda x: compute_lb(x, token_dist, train_data, method='clip-all'), mask_p))
+    # # lower_bound_half = list(map(lambda x: compute_lb(x, token_dist, train_data, method='clip-half'), mask_p))
+    #
+    # ps = ['p20', 'p40', 'p60', 'p80']
+    # data = get_exp_data(ps)
+    # # visualize(ps, data)
+    #
+    # print("Metric")
+    # metric_tab = generate_metric_tab(data, lower_bound, mask_p)
+    # print(metric_tab)
+    # print("Performance")
+    # latex_table = generate_perf_tab(ps, data, lower_bound)
+    # print(latex_table)
 
+
+    # Upper bound
+    n = 128
+    print(f"Cardinality of vocabulary : {len(token_dist.keys())}")
     mask_p = np.arange(0.01, 0.99, step=0.01)
-    # mask_p = np.arange(0.05, 0.95, step=0.05).tolist()
-    lower_bound = []
-    for i in tqdm.tqdm(range(100)):
-        lbs = list(map(lambda x: compute_lb(x, len(train_data)), mask_p))
-        lower_bound.append(lbs)
-    lower_bound = np.array(lower_bound).mean(axis=0)
-    # lower_bound = list(map(lambda x: compute_lb(x, token_dist, train_data), mask_p))
-    # lower_bound_clip = list(map(lambda x: compute_lb(x, token_dist, train_data, method='clip-all'), mask_p))
-    # lower_bound_half = list(map(lambda x: compute_lb(x, token_dist, train_data, method='clip-half'), mask_p))
 
-    ps = ['p20', 'p40', 'p60', 'p80']
-    data = get_exp_data(ps)
-    # visualize(ps, data)
+    # mask_p = np.repeat(mask_p, n, axis=1)
 
-    print("Metric")
-    metric_tab = generate_metric_tab(data, lower_bound, mask_p)
-    print(metric_tab)
-    print("Performance")
-    latex_table = generate_perf_tab(ps, data, lower_bound)
-    print(latex_table)
+    upper_bounds = list(map(lambda p: compute_ub(p, 1000, len(token_dist.keys())), mask_p))
+    # card = np.ones_like(mask_p) * len(token_dist.keys())
+    # n_mat = np.arange(1, n+1, step=1)[np.newaxis, :]
+    # n_mat = np.repeat(n_mat, mask_p.shape[0], axis=0)
+    #
+    # res = (mask_p ** mask_p * (1-mask_p)**(1-mask_p))**n_mat * card
+
+    # card = np.log(card)
+    #
+    # res_log = mask_p * card + n_mat * mask_p * np.log(mask_p) + n_mat * (1-mask_p) * np.log(1-mask_p)
+    # res = np.exp(res_log)
+    for p, ub in zip(mask_p, upper_bounds):
+        print(p, ub)
+    print()
+
+

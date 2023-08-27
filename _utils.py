@@ -1,6 +1,6 @@
 import os
 import wandb
-from transformers.integrations import WandbCallback
+from transformers.integrations import WandbCallback, TrainerCallback
 from transformers.trainer import TrainerState, TrainingArguments, TrainerControl
 
 
@@ -83,6 +83,18 @@ class CustomWandbCallback(WandbCallback):
         if state.is_world_process_zero:
             logs = rewrite_logs(logs)
             self._wandb.log({**logs, "train/global_step": state.global_step})
+
+
+class MaskingCallback(TrainerCallback):
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        _p = 0.4
+        _p = _p-state.global_step/state.max_steps*_p / 2
+        os.environ['MASKING_P'] = str(_p)
+
+    # def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+    #     if state.global_step == 10000:
+    #         os.environ['MASKING_P'] = str(float(os.environ['MASKING_P']) / 2)
+    #         print("Mask P Updated")
 
 
 def rewrite_logs(d):

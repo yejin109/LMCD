@@ -3,13 +3,14 @@ import os
 import argparse
 
 from data import get_dataset, get_data, CustomMLMCollator
-from _utils import CustomWandbCallback
+from _utils import CustomWandbCallback, MaskingCallback
 import numpy as np
 from transformers import AutoModelForMaskedLM, TrainingArguments, Trainer, AutoTokenizer
 from sklearn.metrics import accuracy_score
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model_type', default="bert-base-cased")
+# parser.add_argument('--model_type', default="bert-base-cased")
+parser.add_argument('--model_type', default="prajjwal1/bert-medium")
 parser.add_argument('--data_type', default='huggingface')
 parser.add_argument('--data', default='bookcorpus', required=False, help='default bookcorpus, wikipedia')
 parser.add_argument('--use_partial_data', default=True, required=False)
@@ -23,18 +24,24 @@ parser.add_argument('--dist', default='SRS',
 parser.add_argument('--seed', default=123, type=int)
 parser.add_argument('--n', default=10, type=int)
 parser.add_argument('--D', default=10000)
-parser.add_argument('--p', default=.60, type=float)
 parser.add_argument('--chunk_size', default=64, type=int)
 
 # train
 parser.add_argument('--lr', default=2e-5)
 parser.add_argument('--epochs', default=30)
 parser.add_argument('--wd', default=1e-2)
-parser.add_argument('--max_steps', type=int, default=1000)
-parser.add_argument('--b_train', default=2, type=int)
+parser.add_argument('--max_steps', type=int, default=20000)
+parser.add_argument('--b_train', default=8, type=int)
+
+# parser.add_argument('--p', default=.20, type=float)
+# parser.add_argument('--ada_mask', default=False, required=False)
+
+parser.add_argument('--p', default=.40, type=float)
+parser.add_argument('--ada_mask', default=False, required=False)
+parser.add_argument('--mrd', default=True, required=False)
 
 # Test
-parser.add_argument('--b_eval', default=2, type=int)
+parser.add_argument('--b_eval', default=8, type=int)
 parser.add_argument('--shard_eval', default=300, type=int)
 
 # Log
@@ -43,11 +50,17 @@ parser.add_argument('--save_steps', type=int, default=50000)
 
 
 def train(_model, _dataset, _train_args, _tk, sharding_size=600):
+    _run_name = [args.model_type, os.environ['MASKING_P'], str(args.seed)]
+    if args.ada_mask:
+        _run_name.insert(1, 'Ada-Mask')
+    elif args.mrd:
+        _run_name.insert(1, 'MRD')
+    else:
+        _run_name.insert(1, 'Const-Mask')
     training_args = TrainingArguments(
         output_dir=os.environ['LOG_DIR'],
         evaluation_strategy="steps",  # candidates : steps, epochs
-        run_name=os.environ['EXP_NAME'] + '-'.join(
-            ['', os.environ['MASKING_P'], str(args.seed), str(args.n), str(args.v)]),
+        run_name='-'.join(_run_name),
         **_train_args,
     )
 
@@ -63,6 +76,8 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
 
     )
     trainer.add_callback(CustomWandbCallback)
+    if args.ada_mask or args.mrd:
+        trainer.add_callback(MaskingCallback)
 
     trainer.train()
 
@@ -101,22 +116,28 @@ def compute_metrics(eval_preds):
     mask = labels != -100
     p_err = np.array(list(map(lambda p, l, m: ~ (p[m] == l[m]).all(), preds, labels, mask))).mean()
 
+    preds, labels = eval_preds
+    preds = np.argmax(preds, -1)
+
     preds = preds.reshape(-1)
     labels = labels.reshape(-1)
+
     mask = labels != -100
     labels = labels[mask]
+
     preds = preds[mask]
-    return {'P_err': p_err, 'Token_err': 1 - accuracy_score(labels, preds)}
+    acc_token = accuracy_score(labels, preds)
+    return {'P_err': p_err, 'Token_acc': acc_token}
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    os.environ['CACHE_DIR'] = './cache'
+    os.environ['CACHE_DIR'] = 'C:/Users/ay011/.cache/huggingface/datasets'
     os.environ['MASKING_P'] = str(args.p)
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
     os.environ['VOCAB_SIZE'] = str(args.v)
     os.environ['SEQ_LEN'] = str(args.n)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v2'
+    os.environ['WANDB_PROJECT'] = args.data + ' - v3'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
