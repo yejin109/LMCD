@@ -58,12 +58,6 @@ class CustomWandbCallback(WandbCallback):
                 )
 
             # add config parameters (run may have been created manually)
-            combined_dict.update({
-                'initial_mask_p': float(os.environ['MASKING_P']),
-                'vocab_size': float(os.environ['VOCAB_SIZE']),
-                'sequence_length': float(os.environ['SEQ_LEN']),
-            })
-            self._wandb.config.update(combined_dict, allow_val_change=True)
 
             # define default x-axis (for latest wandb versions)
             if getattr(self._wandb, "define_metric", None):
@@ -86,12 +80,13 @@ class CustomWandbCallback(WandbCallback):
 
 
 class MaskingCallback(TrainerCallback):
-    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        _p = 0.4
-        _p = _p-state.global_step/state.max_steps*_p / 2
-        os.environ['MASKING_P'] = str(_p)
+    # def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+    #     _p = 0.4
+    #     _p = _p-state.global_step/state.max_steps*_p / 2
+    #     os.environ['MASKING_P'] = str(_p)
 
-    # def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+    def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        return None
     #     if state.global_step == 10000:
     #         os.environ['MASKING_P'] = str(float(os.environ['MASKING_P']) / 2)
     #         print("Mask P Updated")
@@ -111,5 +106,6 @@ def rewrite_logs(d):
         else:
             new_d["train/" + k] = v
 
-    new_d['metric/mask_p'] = float(os.environ['MASKING_P'])
+    if 'MASKING_P' in os.environ.keys():
+        new_d['metric/mask_p'] = float(os.environ['MASKING_P'])
     return new_d

@@ -36,9 +36,9 @@ parser.add_argument('--b_train', default=8, type=int)
 # parser.add_argument('--p', default=.20, type=float)
 # parser.add_argument('--ada_mask', default=False, required=False)
 
-parser.add_argument('--p', default=.40, type=float)
-parser.add_argument('--ada_mask', default=False, required=False)
-parser.add_argument('--mrd', default=True, required=False)
+parser.add_argument('--p', default=.20, type=float)
+parser.add_argument('--ada_mask', default=True, required=False)
+parser.add_argument('--mrd', default=False, required=False)
 
 # Test
 parser.add_argument('--b_eval', default=8, type=int)
@@ -46,7 +46,7 @@ parser.add_argument('--shard_eval', default=300, type=int)
 
 # Log
 parser.add_argument('--logging_steps', type=int, default=100)
-parser.add_argument('--save_steps', type=int, default=50000)
+parser.add_argument('--save_steps', type=int, default=20000)
 
 
 def train(_model, _dataset, _train_args, _tk, sharding_size=600):
@@ -127,6 +127,27 @@ def compute_metrics(eval_preds):
 
     preds = preds[mask]
     acc_token = accuracy_score(labels, preds)
+
+    if args.ada_mask or args.mrd:
+        _increment = 0.005
+        _tolerance = 5
+        _p = float(os.environ['MASKING_P'])
+        if 'P_METRIC' not in os.environ.keys():
+            os.environ['P_METRIC'] = str(acc_token / (1-_p))
+        else:
+            if 'P_CNT' not in os.environ.keys():
+                os.environ['P_CNT'] = str(0)
+            _p_cnt = int(os.environ['P_CNT'])
+            metric_cur = acc_token / (1-_p)
+            metric_past = float(os.environ['P_METRIC'])
+
+            if metric_cur > metric_past:
+                if _p_cnt < _tolerance:
+                    os.environ['P_CNT'] = str(_p_cnt+1)
+                else:
+                    os.environ['MASKING_P'] = str(_p+_increment)
+                    os.environ['P_CNT'] = str(0)
+
     return {'P_err': p_err, 'Token_acc': acc_token}
 
 
