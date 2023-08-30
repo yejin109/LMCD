@@ -2,11 +2,14 @@ import datetime
 import os
 import argparse
 
+import torch
 from data import get_dataset, get_data, CustomMLMCollator
 from _utils import CustomWandbCallback, MaskingCallback
 import numpy as np
 from transformers import AutoModelForMaskedLM, TrainingArguments, Trainer, AutoTokenizer
 from sklearn.metrics import accuracy_score
+from huggingface import CustomTrainer
+
 
 parser = argparse.ArgumentParser()
 # parser.add_argument('--model_type', default="bert-base-cased")
@@ -28,17 +31,16 @@ parser.add_argument('--chunk_size', default=64, type=int)
 
 # train
 parser.add_argument('--lr', default=2e-5)
-parser.add_argument('--epochs', default=30)
 parser.add_argument('--wd', default=1e-2)
-parser.add_argument('--max_steps', type=int, default=20000)
+parser.add_argument('--epochs', default=30)
 parser.add_argument('--b_train', default=8, type=int)
-
-# parser.add_argument('--p', default=.20, type=float)
-# parser.add_argument('--ada_mask', default=False, required=False)
+parser.add_argument('--max_steps', type=int, default=20000)
 
 parser.add_argument('--p', default=.20, type=float)
-parser.add_argument('--ada_mask', default=True, required=False)
-parser.add_argument('--mrd', default=False, required=False)
+parser.add_argument('--rankme', default=False, required=False, action=argparse.BooleanOptionalAction)
+parser.add_argument('--ada_mask', default=False, required=False, action=argparse.BooleanOptionalAction)
+parser.add_argument('--mrd', default=False, required=False, action=argparse.BooleanOptionalAction)
+
 
 # Test
 parser.add_argument('--b_eval', default=8, type=int)
@@ -55,25 +57,27 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
         _run_name.insert(1, 'Ada-Mask')
     elif args.mrd:
         _run_name.insert(1, 'MRD')
+    elif args.rankme:
+        _run_name.insert(1, 'RankMe')
     else:
         _run_name.insert(1, 'Const-Mask')
     training_args = TrainingArguments(
         output_dir=os.environ['LOG_DIR'],
         evaluation_strategy="steps",  # candidates : steps, epochs
         run_name='-'.join(_run_name),
+        include_inputs_for_metrics=True,
         **_train_args,
     )
 
     mlm_collator = CustomMLMCollator(_tk, args.p)
 
-    trainer = Trainer(
+    trainer = CustomTrainer(
         model=_model,
         args=training_args,
         train_dataset=_dataset["train"],
         eval_dataset=_dataset["test"].shard(num_shards=sharding_size, index=np.random.randint(0, sharding_size, size=1)),
         data_collator=mlm_collator,
         compute_metrics=compute_metrics,
-
     )
     trainer.add_callback(CustomWandbCallback)
     if args.ada_mask or args.mrd:
@@ -109,14 +113,32 @@ def group_texts(examples, _chunk_size=None):
     return result
 
 
-def compute_metrics(eval_preds):
-    preds, labels = eval_preds
-    preds = np.argmax(preds, -1)
+def write_env_var(_name, val):
+    if _name not in os.environ.keys():
+        os.environ[_name] = str(val)
 
+
+def compute_metrics(eval_preds, _model, eps=1e-6):
+    preds, labels, inps = eval_preds
+
+    # RankMe
+    with torch.no_grad():
+        _model.eval()
+        embs = _model.bert.embeddings(torch.Tensor(inps).to('cuda:0').long())
+        embs = embs.cpu().detach().numpy()
+    _, singular_vals, _ = np.linalg.svd(embs)
+
+    p = singular_vals / singular_vals.sum(axis=1, keepdims=True) + eps
+    rankme = np.exp((- p * np.log(p)).sum(axis=1)).mean()
+
+    # P_err
+    preds, labels, inps = eval_preds
+    preds = np.argmax(preds, -1)
     mask = labels != -100
     p_err = np.array(list(map(lambda p, l, m: ~ (p[m] == l[m]).all(), preds, labels, mask))).mean()
 
-    preds, labels = eval_preds
+    # Token_acc
+    preds, labels, inps = eval_preds
     preds = np.argmax(preds, -1)
 
     preds = preds.reshape(-1)
@@ -124,31 +146,40 @@ def compute_metrics(eval_preds):
 
     mask = labels != -100
     labels = labels[mask]
-
     preds = preds[mask]
+
     acc_token = accuracy_score(labels, preds)
 
-    if args.ada_mask or args.mrd:
-        _increment = 0.005
+    # Metric
+    _p = float(os.environ['MASKING_P'])
+    metric_cur = acc_token / (1 - _p)
+    write_env_var('P_METRIC', str(metric_cur))
+    write_env_var('RankMe', str(rankme))
+    write_env_var('P_CNT', str(0))
+
+    if args.ada_mask or args.mrd or args.rankme:
+        _increment = 0.05
         _tolerance = 5
-        _p = float(os.environ['MASKING_P'])
-        if 'P_METRIC' not in os.environ.keys():
-            os.environ['P_METRIC'] = str(acc_token / (1-_p))
-        else:
-            if 'P_CNT' not in os.environ.keys():
-                os.environ['P_CNT'] = str(0)
-            _p_cnt = int(os.environ['P_CNT'])
-            metric_cur = acc_token / (1-_p)
+
+        _p_cnt = int(os.environ['P_CNT'])
+
+        if args.ada_mask:
             metric_past = float(os.environ['P_METRIC'])
+            condition = np.abs(metric_cur - metric_past) > 0.25
+        elif args.rankme:
+            rankme_past = float(os.environ['RankMe'])
+            condition = rankme < rankme_past
+        else:
+            condition = False
 
-            if metric_cur > metric_past:
-                if _p_cnt < _tolerance:
-                    os.environ['P_CNT'] = str(_p_cnt+1)
-                else:
-                    os.environ['MASKING_P'] = str(_p+_increment)
-                    os.environ['P_CNT'] = str(0)
+        if condition:
+            if _p_cnt < _tolerance:
+                os.environ['P_CNT'] = str(_p_cnt+1)
+            else:
+                os.environ['MASKING_P'] = str(_p+_increment)
+                os.environ['P_CNT'] = str(0)
 
-    return {'P_err': p_err, 'Token_acc': acc_token}
+    return {'P_err': p_err, 'Token_acc': acc_token, 'Metric': metric_cur, 'RankMe': rankme}
 
 
 if __name__ == '__main__':
@@ -158,7 +189,7 @@ if __name__ == '__main__':
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
     os.environ['VOCAB_SIZE'] = str(args.v)
     os.environ['SEQ_LEN'] = str(args.n)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v3'
+    os.environ['WANDB_PROJECT'] = args.data + ' - v4'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(

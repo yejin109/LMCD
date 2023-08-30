@@ -2,21 +2,22 @@ import datetime
 import os
 import argparse
 
-from data import get_dataset, get_data, CustomMLMCollator
-from _utils import CustomWandbCallback, MaskingCallback
+from data import get_dataset
+from _utils import CustomWandbCallback
 import numpy as np
 from transformers import TrainingArguments, AutoTokenizer, DefaultDataCollator, EvalPrediction, AutoModelForQuestionAnswering
 from datasets import load_metric
-from sklearn.metrics import accuracy_score
 from qa import postprocess_qa_predictions, QuestionAnsweringTrainer, prepare_validation_features
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', default=123, type=int)
 
-# parser.add_argument('--model_type', default="bert-base-cased")
-parser.add_argument('--model_type', default="prajjwal1/bert-medium")
-parser.add_argument('--ckpt', default="./logs/bert-medium-p20-ada/checkpoint-20000")
+# parser.add_argument('--model_type', default="prajjwal1/bert-medium")
+# parser.add_argument('--ckpt', default="./logs/bert-medium-p20-ada/checkpoint-20000")
+
+parser.add_argument('--model_type', default="bert-base-cased")
+parser.add_argument('--ckpt', default="./logs/bert-base-p40-const/checkpoint-20000")
 
 parser.add_argument('--data_type', default='huggingface')
 parser.add_argument('--split_load', default=5000, type=int)
@@ -30,10 +31,10 @@ parser.add_argument('--lr', default=2e-5)
 parser.add_argument('--epochs', default=3, help='num_train_epochs')
 parser.add_argument('--wd', default=1e-2, help='weight decay')
 parser.add_argument('--max_steps', type=int, default=20000)
-parser.add_argument('--b_train', default=8, type=int)
+parser.add_argument('--b_train', default=2, type=int)
 
 # Test
-parser.add_argument('--b_eval', default=8, type=int)
+parser.add_argument('--b_eval', default=2, type=int)
 parser.add_argument('--shard_eval', default=300, type=int)
 
 # Log
@@ -150,7 +151,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     os.environ['CACHE_DIR'] = 'C:/Users/ay011/.cache/huggingface/datasets'
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v3 - eval'
+    os.environ['WANDB_PROJECT'] = args.data + ' - v4 - eval'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
