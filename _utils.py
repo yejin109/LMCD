@@ -108,4 +108,6 @@ def rewrite_logs(d):
 
     if 'MASKING_P' in os.environ.keys():
         new_d['metric/mask_p'] = float(os.environ['MASKING_P'])
+    if 'P_CNT' in os.environ.keys():
+        new_d['metric/p_cnt'] = float(os.environ['P_CNT'])
     return new_d
