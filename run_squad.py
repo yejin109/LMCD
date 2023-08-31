@@ -43,7 +43,7 @@ parser.add_argument('--save_steps', type=int, default=20000)
 
 
 def train(_model, _dataset, _train_args, _tk, eval_examples):
-    _run_name = [args.model_type, str(args.seed)]
+    _run_name = [args.ckpt.split('/')[2], str(args.seed)]
 
     training_args = TrainingArguments(
         output_dir=os.environ['LOG_DIR'],

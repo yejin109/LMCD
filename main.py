@@ -37,8 +37,8 @@ parser.add_argument('--b_train', default=8, type=int)
 parser.add_argument('--max_steps', type=int, default=20000)
 
 parser.add_argument('--p', default=.20, type=float)
-parser.add_argument('--rankme', default=False, required=False, action=argparse.BooleanOptionalAction)
 parser.add_argument('--ada_mask', default=False, required=False, action=argparse.BooleanOptionalAction)
+parser.add_argument('--entropy', default=True, required=False, action=argparse.BooleanOptionalAction)
 parser.add_argument('--mrd', default=False, required=False, action=argparse.BooleanOptionalAction)
 
 
@@ -57,8 +57,8 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
         _run_name.insert(1, 'Ada-Mask')
     elif args.mrd:
         _run_name.insert(1, 'MRD')
-    elif args.rankme:
-        _run_name.insert(1, 'RankMe')
+    elif args.entropy:
+        _run_name.insert(1, 'Entropy')
     else:
         _run_name.insert(1, 'Const-Mask')
     training_args = TrainingArguments(
@@ -119,9 +119,16 @@ def write_env_var(_name, val):
 
 
 def compute_metrics(eval_preds, _model, eps=1e-6):
+    write_env_var('EVAL_CNT', str(0))
+    # Entropy
     preds, labels, inps = eval_preds
+    mask = labels != -100
+    log_probs = np.log(np.exp(preds) / np.exp(preds).sum(axis=-1, keepdims=True))
+    entropy = - np.sum(np.exp(log_probs) * log_probs, axis=-1)
+    entropy = entropy[mask].mean(axis=-1)
 
     # RankMe
+    preds, labels, inps = eval_preds
     with torch.no_grad():
         _model.eval()
         embs = _model.bert.embeddings(torch.Tensor(inps).to('cuda:0').long())
@@ -154,32 +161,45 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
     _p = float(os.environ['MASKING_P'])
     metric_cur = acc_token / (1 - _p)
     write_env_var('P_METRIC', str(metric_cur))
-    write_env_var('RankMe', str(rankme))
+    write_env_var('ENTROPY', str(entropy))
     write_env_var('P_CNT', str(0))
 
-    if args.ada_mask or args.mrd or args.rankme:
-        _increment = 0.05
-        _tolerance = 5
+    if (args.ada_mask or args.mrd) and int(os.environ['EVAL_CNT']) > 10:
+        _increment = 0.01
+        _tolerance = 3
 
         _p_cnt = int(os.environ['P_CNT'])
 
         if args.ada_mask:
             metric_past = float(os.environ['P_METRIC'])
-            condition = np.abs(metric_cur - metric_past) > 0.25
-        elif args.rankme:
-            rankme_past = float(os.environ['RankMe'])
-            condition = rankme < rankme_past
-        else:
-            condition = False
-
-        if condition:
-            if _p_cnt < _tolerance:
-                os.environ['P_CNT'] = str(_p_cnt+1)
-            else:
-                os.environ['MASKING_P'] = str(_p+_increment)
-                os.environ['P_CNT'] = str(0)
-
-    return {'P_err': p_err, 'Token_acc': acc_token, 'Metric': metric_cur, 'RankMe': rankme}
+            if metric_cur > metric_past + 0.02:
+                if _p_cnt < _tolerance:
+                    os.environ['P_CNT'] = str(_p_cnt + 1)
+                else:
+                    os.environ['MASKING_P'] = str(_p - _increment)
+                    os.environ['P_CNT'] = str(0)
+            elif metric_cur < metric_past - 0.02:
+                if _p_cnt < _tolerance:
+                    os.environ['P_CNT'] = str(_p_cnt + 1)
+                else:
+                    os.environ['MASKING_P'] = str(_p + _increment)
+                    os.environ['P_CNT'] = str(0)
+        elif args.entropy:
+            entropy_past = float(os.environ['ENTROPY'])
+            if entropy > entropy_past + 0.05:
+                if _p_cnt < _tolerance:
+                    os.environ['P_CNT'] = str(_p_cnt + 1)
+                else:
+                    os.environ['MASKING_P'] = str(_p - _increment)
+                    os.environ['P_CNT'] = str(0)
+            elif entropy < entropy_past - 0.05:
+                if _p_cnt < _tolerance:
+                    os.environ['P_CNT'] = str(_p_cnt + 1)
+                else:
+                    os.environ['MASKING_P'] = str(_p + _increment)
+                    os.environ['P_CNT'] = str(0)
+    os.environ['EVAL_CNT'] = str(int(os.environ['EVAL_CNT'])+1)
+    return {'P_err': p_err, 'Token_acc': acc_token, 'Metric': metric_cur, 'RankMe': rankme, 'Entropy': entropy}
 
 
 if __name__ == '__main__':
@@ -189,7 +209,7 @@ if __name__ == '__main__':
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
     os.environ['VOCAB_SIZE'] = str(args.v)
     os.environ['SEQ_LEN'] = str(args.n)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v4'
+    os.environ['WANDB_PROJECT'] = args.data + ' - v5'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
