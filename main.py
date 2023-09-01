@@ -6,7 +6,7 @@ import torch
 from data import get_dataset, get_data, CustomMLMCollator
 from _utils import CustomWandbCallback, MaskingCallback
 import numpy as np
-from transformers import AutoModelForMaskedLM, TrainingArguments, Trainer, AutoTokenizer
+from transformers import AutoModelForMaskedLM, TrainingArguments, AutoTokenizer
 from sklearn.metrics import accuracy_score
 from huggingface import CustomTrainer
 
@@ -80,7 +80,7 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
         compute_metrics=compute_metrics,
     )
     trainer.add_callback(CustomWandbCallback)
-    if args.ada_mask or args.mrd:
+    if args.mrd:
         trainer.add_callback(MaskingCallback)
 
     trainer.train()
