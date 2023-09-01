@@ -12,8 +12,9 @@ from huggingface import CustomTrainer
 
 
 parser = argparse.ArgumentParser()
-# parser.add_argument('--model_type', default="bert-base-cased")
 parser.add_argument('--model_type', default="prajjwal1/bert-medium")
+parser.add_argument('--ckpt', default=None)
+
 parser.add_argument('--data_type', default='huggingface')
 parser.add_argument('--data', default='bookcorpus', required=False, help='default bookcorpus, wikipedia')
 parser.add_argument('--use_partial_data', default=True, required=False)
@@ -38,13 +39,16 @@ parser.add_argument('--max_steps', type=int, default=20000)
 
 parser.add_argument('--p', default=.20, type=float)
 parser.add_argument('--ada_mask', default=False, required=False, action=argparse.BooleanOptionalAction)
-parser.add_argument('--entropy', default=True, required=False, action=argparse.BooleanOptionalAction)
+parser.add_argument('--entropy', default=False, required=False, action=argparse.BooleanOptionalAction)
 parser.add_argument('--mrd', default=False, required=False, action=argparse.BooleanOptionalAction)
 
 
-# Test
+# Validation
 parser.add_argument('--b_eval', default=8, type=int)
 parser.add_argument('--shard_eval', default=300, type=int)
+
+# Test
+parser.add_argument('--test', default=False, required=False, action=argparse.BooleanOptionalAction)
 
 # Log
 parser.add_argument('--logging_steps', type=int, default=100)
@@ -83,7 +87,11 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
     if args.mrd:
         trainer.add_callback(MaskingCallback)
 
-    trainer.train()
+    if args.test:
+        eval_res = trainer.evaluate()
+        print(f"Evaludation : {eval_res['eval_loss']}")
+    else:
+        trainer.train()
 
 
 def tokenize_function(examples, _tokenizer=None):
@@ -221,7 +229,8 @@ if __name__ == '__main__':
 
     np.random.seed(args.seed)
 
-    model = AutoModelForMaskedLM.from_pretrained(args.model_type)
+    _model_path = args.ckpt if args.ckpt is not None else args.model_type
+    model = AutoModelForMaskedLM.from_pretrained(_model_path)
 
     train_args = {'learning_rate': args.lr, 'num_train_epochs': args.epochs, 'weight_decay': args.wd,
                   'per_device_train_batch_size': args.b_train, 'per_device_eval_batch_size': args.b_eval,
