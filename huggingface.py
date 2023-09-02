@@ -66,7 +66,6 @@ class CustomTrainer(Trainer):
 
         batch_size = self.args.eval_batch_size
 
-
         model.eval()
 
         self.callback_handler.eval_dataloader = dataloader

@@ -86,7 +86,13 @@ class MaskingCallback(TrainerCallback):
     #     os.environ['MASKING_P'] = str(_p)
 
     def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return None
+        _p = float(os.environ['MASKING_P'])
+        _increment = 100/20000
+        ticker = os.environ['P_TICKER']
+        if ticker == 'UP':
+            os.environ['MASKING_P'] = str(_p + _increment)
+        elif ticker == 'DOWN':
+            os.environ['MASKING_P'] = str(_p - _increment)
     #     if state.global_step == 10000:
     #         os.environ['MASKING_P'] = str(float(os.environ['MASKING_P']) / 2)
     #         print("Mask P Updated")

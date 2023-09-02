@@ -7,11 +7,15 @@ class CustomMLMCollator:
         self.tokenizer = tk
         self.mask_prob = mask_prob
 
-    def __call__(self, inputs):
+    def __call__(self, inputs, use_init_p=False):
         first = inputs[0]['input_ids']
         agg = torch.cat(([i['input_ids'] for i in inputs])).reshape((-1, first.size(-1)))
         batch = dict()
-        batch['input_ids'], batch['labels'] = self.masking_tokens(agg, float(os.environ['MASKING_P']))
+        if use_init_p:
+            _p = self.mask_prob
+        else:
+            _p = float(os.environ['MASKING_P'])
+        batch['input_ids'], batch['labels'] = self.masking_tokens(agg, _p)
 
         batch['attention_mask'] = torch.cat(([i['attention_mask'] for i in inputs])).reshape((-1, first.size(-1)))
 

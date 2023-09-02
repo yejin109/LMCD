@@ -52,7 +52,7 @@ parser.add_argument('--test', default=False, required=False, action=argparse.Boo
 
 # Log
 parser.add_argument('--logging_steps', type=int, default=100)
-parser.add_argument('--save_steps', type=int, default=20000)
+parser.add_argument('--save_steps', type=int, default=5000)
 
 
 def train(_model, _dataset, _train_args, _tk, sharding_size=600):
@@ -73,8 +73,6 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
         **_train_args,
     )
 
-    mlm_collator = CustomMLMCollator(_tk, args.p)
-
     trainer = CustomTrainer(
         model=_model,
         args=training_args,
@@ -84,7 +82,7 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
         compute_metrics=compute_metrics,
     )
     trainer.add_callback(CustomWandbCallback)
-    if args.mrd:
+    if args.mrd or args.ada_mask:
         trainer.add_callback(MaskingCallback)
 
     if args.test:
@@ -126,6 +124,21 @@ def write_env_var(_name, val):
         os.environ[_name] = str(val)
 
 
+def get_token_acc(preds, labels):
+    preds = np.argmax(preds, -1)
+
+    preds = preds.reshape(-1)
+    labels = labels.reshape(-1)
+
+    mask = labels != -100
+    labels = labels[mask]
+    preds = preds[mask]
+
+    acc_token = accuracy_score(labels, preds)
+
+    return acc_token
+
+
 def compute_metrics(eval_preds, _model, eps=1e-6):
     write_env_var('EVAL_CNT', str(0))
     # Entropy
@@ -154,20 +167,31 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
 
     # Token_acc
     preds, labels, inps = eval_preds
-    preds = np.argmax(preds, -1)
-
-    preds = preds.reshape(-1)
-    labels = labels.reshape(-1)
-
-    mask = labels != -100
-    labels = labels[mask]
-    preds = preds[mask]
-
-    acc_token = accuracy_score(labels, preds)
+    acc_token = get_token_acc(preds, labels)
 
     # Metric
     _p = float(os.environ['MASKING_P'])
     metric_cur = acc_token / (1 - _p)
+
+    # RE-evaluation
+    with torch.no_grad():
+        _model.eval()
+        preds, labels, inps = eval_preds
+        org_ids = np.zeros_like(inps)
+        mask = labels != -100
+        org_ids[mask] = labels[mask]
+        org_ids[~mask] = inps[~mask]
+
+        org_ids, org_labels = mlm_collator.masking_tokens(torch.Tensor(org_ids).to('cuda:0').long(), args.p)
+        org_logits = _model(org_ids)['logits'].detach().cpu().numpy()
+        org_acc = get_token_acc(org_logits, org_labels.detach().cpu().numpy())
+        org_labels = None
+        org_logits = None
+        org_ids = None
+
+    write_env_var('P_TICKER', 'STAY')
+    write_env_var('TOKEN_ACC_ORG', str(org_acc))
+    write_env_var('TOKEN_ACC', str(acc_token))
     write_env_var('P_METRIC', str(metric_cur))
     write_env_var('ENTROPY', str(entropy))
     write_env_var('P_CNT', str(0))
@@ -179,19 +203,27 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
         _p_cnt = int(os.environ['P_CNT'])
 
         if args.ada_mask:
-            metric_past = float(os.environ['P_METRIC'])
-            if metric_cur > metric_past + 0.02:
-                if _p_cnt < _tolerance:
-                    os.environ['P_CNT'] = str(_p_cnt + 1)
-                else:
-                    os.environ['MASKING_P'] = str(_p - _increment)
-                    os.environ['P_CNT'] = str(0)
-            elif metric_cur < metric_past - 0.02:
-                if _p_cnt < _tolerance:
-                    os.environ['P_CNT'] = str(_p_cnt + 1)
-                else:
-                    os.environ['MASKING_P'] = str(_p + _increment)
-                    os.environ['P_CNT'] = str(0)
+            current_acc = org_acc
+            past_acc = float(os.environ['TOKEN_ACC_ORG'])
+            if current_acc > past_acc + 0.01:
+                os.environ['P_TICKER'] = 'UP'
+            elif current_acc < past_acc - 0.01:
+                os.environ['P_TICKER'] = 'DOWN'
+            else:
+                os.environ['P_TICKER'] = 'STAY'
+            # metric_past = float(os.environ['P_METRIC'])
+            # if metric_cur > metric_past + 0.02:
+            #     if _p_cnt < _tolerance:
+            #         os.environ['P_CNT'] = str(_p_cnt + 1)
+            #     else:
+            #         os.environ['MASKING_P'] = str(_p - _increment)
+            #         os.environ['P_CNT'] = str(0)
+            # elif metric_cur < metric_past - 0.02:
+            #     if _p_cnt < _tolerance:
+            #         os.environ['P_CNT'] = str(_p_cnt + 1)
+            #     else:
+            #         os.environ['MASKING_P'] = str(_p + _increment)
+            #         os.environ['P_CNT'] = str(0)
         elif args.entropy:
             entropy_past = float(os.environ['ENTROPY'])
             if entropy > entropy_past + 0.05:
@@ -207,7 +239,11 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
                     os.environ['MASKING_P'] = str(_p + _increment)
                     os.environ['P_CNT'] = str(0)
     os.environ['EVAL_CNT'] = str(int(os.environ['EVAL_CNT'])+1)
-    return {'P_err': p_err, 'Token_acc': acc_token, 'Metric': metric_cur, 'RankMe': rankme, 'Entropy': entropy}
+    os.environ['TOKEN_ACC'] = str(acc_token)
+    os.environ['TOKEN_ACC_ORG'] = str(org_acc)
+
+    eval_res = {'P_err': p_err, 'Token_acc': acc_token, 'Metric': metric_cur, 'RankMe': rankme, 'Entropy': entropy, 'Token_acc_org': org_acc}
+    return eval_res
 
 
 if __name__ == '__main__':
@@ -265,6 +301,7 @@ if __name__ == '__main__':
         if isinstance(dataset, dict) and ('test' not in dataset.keys()):
             dataset = dataset['train'].train_test_split(0.01)
 
+        mlm_collator = CustomMLMCollator(tokenizer, args.p)
     else:
         dataset = None
         raise AssertionError(f"")

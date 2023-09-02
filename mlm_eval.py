@@ -20,15 +20,7 @@ parser.add_argument('--data', default='bookcorpus', required=False, help='defaul
 parser.add_argument('--use_partial_data', default=True, required=False)
 parser.add_argument('--partial_data_size', default=8, type=int, required=False)
 
-# Synthetic data
-parser.add_argument('--v', default=2, type=int)
-parser.add_argument('--dist', default='SRS',
-                    help="How to inject non iid",
-                    choices=['uniform', 'SRS', 'addition', 'nonlinear'])
 parser.add_argument('--seed', default=123, type=int)
-parser.add_argument('--n', default=10, type=int)
-parser.add_argument('--D', default=10000)
-parser.add_argument('--chunk_size', default=64, type=int)
 
 # train
 parser.add_argument('--lr', default=2e-5)
@@ -36,6 +28,7 @@ parser.add_argument('--wd', default=1e-2)
 parser.add_argument('--epochs', default=30)
 parser.add_argument('--b_train', default=8, type=int)
 parser.add_argument('--max_steps', type=int, default=20000)
+parser.add_argument('--chunk_size', default=64, type=int)
 
 parser.add_argument('--p', default=.20, type=float)
 parser.add_argument('--ada_mask', default=False, required=False, action=argparse.BooleanOptionalAction)
@@ -53,6 +46,38 @@ parser.add_argument('--test', default=False, required=False, action=argparse.Boo
 # Log
 parser.add_argument('--logging_steps', type=int, default=100)
 parser.add_argument('--save_steps', type=int, default=20000)
+
+
+def get_token_acc(preds, labels):
+    preds = np.argmax(preds, -1)
+
+    preds = preds.reshape(-1)
+    labels = labels.reshape(-1)
+
+    mask = labels != -100
+    labels = labels[mask]
+    preds = preds[mask]
+
+    acc_token = accuracy_score(labels, preds)
+
+    return acc_token
+
+
+def evaluate(_model, _dataset):
+    org_ids = _dataset['input_ids']
+    with torch.no_grad():
+        _model.eval()
+
+        org_ids, org_labels = mlm_collator.masking_tokens(torch.Tensor(org_ids).to('cuda:0').long(), args.p)
+        org_output = _model(org_ids, org_labels)
+        org_loss = org_output['loss'].detach().cpu().numpy()
+        org_logits = org_output['logits'].detach().cpu().numpy()
+        org_acc = get_token_acc(org_logits, org_labels.detach().cpu().numpy())
+        org_labels = None
+        org_logits = None
+        org_ids = None
+
+    return org_acc, org_loss
 
 
 def train(_model, _dataset, _train_args, _tk, sharding_size=600):
@@ -218,36 +243,25 @@ if __name__ == '__main__':
                   'max_steps': args.max_steps,
                   'logging_steps': args.logging_steps, 'save_steps': args.save_steps}
 
-    if args.data_type == 'synthetic':
-        data = get_data((args.v, args.dist, args.n, args.D, args.b, args.seed))
-        dataset = get_dataset(args.data_type, data.get_data())
-        dataset.set_format(type='torch', columns=['input_ids'])
-        dataset = dataset.train_test_split(args.test_ratio)
-        tokenizer = None
-    elif args.data_type == 'huggingface':
-        dataset = get_dataset(args.data_type, args.data)
-        if args.use_partial_data:
-            dataset['train'] = dataset['train'].shard(args.partial_data_size, index=0)
-        if 'unsupervised' in dataset.keys():
-            del dataset['unsupervised']
-        tokenizer = AutoTokenizer.from_pretrained(args.model_type)
-        tokenized_datasets = dataset.map(tokenize_function,
-                                         batched=True, remove_columns=list(dataset['train'].features.keys()),
-                                         fn_kwargs={'_tokenizer': tokenizer})
-        chunk_size = args.chunk_size
-        lm_datasets = tokenized_datasets.map(group_texts,
-                                             batched=True,
-                                             fn_kwargs={'_chunk_size': chunk_size})
-        lm_datasets.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
-        dataset = lm_datasets
-        tokenized_datasets = None
+    dataset = get_dataset(args.data_type, args.data)
+    if args.use_partial_data:
+        dataset['train'] = dataset['train'].shard(args.partial_data_size, index=0)
+    if 'unsupervised' in dataset.keys():
+        del dataset['unsupervised']
+    tokenizer = AutoTokenizer.from_pretrained(args.model_type)
+    tokenized_datasets = dataset.map(tokenize_function,
+                                     batched=True, remove_columns=list(dataset['train'].features.keys()),
+                                     fn_kwargs={'_tokenizer': tokenizer})
+    chunk_size = args.chunk_size
+    lm_datasets = tokenized_datasets.map(group_texts,
+                                         batched=True,
+                                         fn_kwargs={'_chunk_size': chunk_size})
+    lm_datasets.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+    dataset = lm_datasets
 
-        if isinstance(dataset, dict) and ('test' not in dataset.keys()):
-            dataset = dataset['train'].train_test_split(0.01)
-
-    else:
-        dataset = None
-        raise AssertionError(f"")
+    mlm_collator = CustomMLMCollator(tokenizer, args.p)
 
     print(dataset)
-    train(model, dataset, train_args, tokenizer, sharding_size=args.shard_eval)
+    acc, loss = evaluate(model, dataset)
+    print(f'ACC {acc}')
+    print(f'Loss {loss}')
