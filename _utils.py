@@ -79,12 +79,15 @@ class CustomWandbCallback(WandbCallback):
             self._wandb.log({**logs, "train/global_step": state.global_step})
 
 
-class MaskingCallback(TrainerCallback):
-    # def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-    #     _p = 0.4
-    #     _p = _p-state.global_step/state.max_steps*_p / 2
-    #     os.environ['MASKING_P'] = str(_p)
+class AscMaskCallBack(TrainerCallback):
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        _p = float(os.environ['MASKING_P_INIT'])
+        theta = state.global_step/state.max_steps
+        _p = (1-theta) * _p + theta*(_p*2)
+        os.environ['MASKING_P'] = str(_p)
 
+
+class AdaMaskCallBack(TrainerCallback):
     def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         _p = float(os.environ['MASKING_P'])
         _increment = 100/20000
@@ -93,9 +96,6 @@ class MaskingCallback(TrainerCallback):
             os.environ['MASKING_P'] = str(_p + _increment)
         elif ticker == 'DOWN':
             os.environ['MASKING_P'] = str(_p - _increment)
-    #     if state.global_step == 10000:
-    #         os.environ['MASKING_P'] = str(float(os.environ['MASKING_P']) / 2)
-    #         print("Mask P Updated")
 
 
 def rewrite_logs(d):

@@ -4,7 +4,7 @@ import argparse
 
 import torch
 from data import get_dataset, get_data, CustomMLMCollator
-from _utils import CustomWandbCallback, MaskingCallback
+from _utils import CustomWandbCallback, AscMaskCallBack, AdaMaskCallBack
 import numpy as np
 from transformers import AutoModelForMaskedLM, TrainingArguments, AutoTokenizer
 from sklearn.metrics import accuracy_score
@@ -82,8 +82,10 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
         compute_metrics=compute_metrics,
     )
     trainer.add_callback(CustomWandbCallback)
-    if args.mrd or args.ada_mask:
-        trainer.add_callback(MaskingCallback)
+    if args.mrd:
+        trainer.add_callback(AscMaskCallBack)
+    if args.ada_mask:
+        trainer.add_callback(AdaMaskCallBack)
 
     if args.test:
         eval_res = trainer.evaluate()
@@ -196,7 +198,7 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
     write_env_var('ENTROPY', str(entropy))
     write_env_var('P_CNT', str(0))
 
-    if (args.ada_mask or args.mrd) and int(os.environ['EVAL_CNT']) > 10:
+    if args.ada_mask:
         _increment = 0.01
         _tolerance = 3
 
@@ -224,25 +226,31 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
             #     else:
             #         os.environ['MASKING_P'] = str(_p + _increment)
             #         os.environ['P_CNT'] = str(0)
-        elif args.entropy:
-            entropy_past = float(os.environ['ENTROPY'])
-            if entropy > entropy_past + 0.05:
-                if _p_cnt < _tolerance:
-                    os.environ['P_CNT'] = str(_p_cnt + 1)
-                else:
-                    os.environ['MASKING_P'] = str(_p - _increment)
-                    os.environ['P_CNT'] = str(0)
-            elif entropy < entropy_past - 0.05:
-                if _p_cnt < _tolerance:
-                    os.environ['P_CNT'] = str(_p_cnt + 1)
-                else:
-                    os.environ['MASKING_P'] = str(_p + _increment)
-                    os.environ['P_CNT'] = str(0)
+        # elif args.entropy:
+        #     entropy_past = float(os.environ['ENTROPY'])
+        #     if entropy > entropy_past + 0.05:
+        #         if _p_cnt < _tolerance:
+        #             os.environ['P_CNT'] = str(_p_cnt + 1)
+        #         else:
+        #             os.environ['MASKING_P'] = str(_p - _increment)
+        #             os.environ['P_CNT'] = str(0)
+        #     elif entropy < entropy_past - 0.05:
+        #         if _p_cnt < _tolerance:
+        #             os.environ['P_CNT'] = str(_p_cnt + 1)
+        #         else:
+        #             os.environ['MASKING_P'] = str(_p + _increment)
+        #             os.environ['P_CNT'] = str(0)
     os.environ['EVAL_CNT'] = str(int(os.environ['EVAL_CNT'])+1)
     os.environ['TOKEN_ACC'] = str(acc_token)
     os.environ['TOKEN_ACC_ORG'] = str(org_acc)
 
-    eval_res = {'P_err': p_err, 'Token_acc': acc_token, 'Metric': metric_cur, 'RankMe': rankme, 'Entropy': entropy, 'Token_acc_org': org_acc}
+    eval_res = {
+        'P_err': p_err,
+        'Token_acc': acc_token,
+        'Metric': metric_cur,
+        'RankMe': rankme,
+        'Entropy': entropy,
+        'Token_acc_org': org_acc}
     return eval_res
 
 
@@ -250,6 +258,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     os.environ['CACHE_DIR'] = 'C:/Users/ay011/.cache/huggingface/datasets'
     os.environ['MASKING_P'] = str(args.p)
+    os.environ['MASKING_P_INIT'] = str(args.p)
+
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
     os.environ['VOCAB_SIZE'] = str(args.v)
     os.environ['SEQ_LEN'] = str(args.n)

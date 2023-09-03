@@ -4,7 +4,7 @@ import argparse
 
 import torch
 from data import get_dataset, get_data, CustomMLMCollator
-from _utils import CustomWandbCallback, MaskingCallback
+from _utils import CustomWandbCallback, AscMaskCallBack
 import numpy as np
 from transformers import AutoModelForMaskedLM, TrainingArguments, AutoTokenizer
 from sklearn.metrics import accuracy_score

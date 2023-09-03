@@ -1,7 +1,7 @@
 import datetime
 import os
 import argparse
-
+import math
 from data import get_dataset
 from _utils import CustomWandbCallback
 import numpy as np
@@ -13,14 +13,14 @@ from qa import postprocess_qa_predictions, QuestionAnsweringTrainer, prepare_val
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', default=123, type=int)
 
-# parser.add_argument('--model_type', default="prajjwal1/bert-medium")
-# parser.add_argument('--ckpt', default="./logs/bert-medium-p20-ada/checkpoint-20000")
+parser.add_argument('--model_type', default="prajjwal1/bert-medium")
+parser.add_argument('--ckpt', default="./logs/bert-medium-p20-ada-v5/checkpoint-20000")
 
-parser.add_argument('--model_type', default="bert-base-cased")
-parser.add_argument('--ckpt', default="./logs/bert-base-p40-const/checkpoint-20000")
+# parser.add_argument('--model_type', default="bert-base-cased")
+# parser.add_argument('--ckpt', default="./logs/bert-base-p40-const/checkpoint-20000")
 
 parser.add_argument('--data_type', default='huggingface')
-parser.add_argument('--split_load', default=5000, type=int)
+parser.add_argument('--split_load', default=10000, type=int)
 parser.add_argument('--data', default='squad', required=False, help='default squad')
 parser.add_argument('--split_test', default=0.2, type=float)
 
@@ -31,10 +31,10 @@ parser.add_argument('--lr', default=2e-5)
 parser.add_argument('--epochs', default=3, help='num_train_epochs')
 parser.add_argument('--wd', default=1e-2, help='weight decay')
 parser.add_argument('--max_steps', type=int, default=20000)
-parser.add_argument('--b_train', default=2, type=int)
+parser.add_argument('--b_train', default=8, type=int)
 
 # Test
-parser.add_argument('--b_eval', default=2, type=int)
+parser.add_argument('--b_eval', default=8, type=int)
 parser.add_argument('--shard_eval', default=300, type=int)
 
 # Log
@@ -186,6 +186,7 @@ if __name__ == '__main__':
                 desc="Running tokenizer on validation dataset",
                 fn_kwargs={'max_seq_length': args.chunk_size, 'question_column_name': question_column_name, 'context_column_name':context_column_name, 'tokenizer': tokenizer}
             )
+    eval_dataset = eval_dataset.shard(int(math.floor(len(eval_dataset)/5000)), index=0)
     tokenized_datasets['test'] = eval_dataset
     print(tokenized_datasets)
     metric = load_metric(args.data)
