@@ -13,7 +13,7 @@ from huggingface import CustomTrainer
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_type', default="prajjwal1/bert-medium")
-parser.add_argument('--ckpt', default=None)
+parser.add_argument('--ckpt', default='./logs/bert-medium-p20/checkpoint-20000')
 
 parser.add_argument('--data_type', default='huggingface')
 parser.add_argument('--data', default='bookcorpus', required=False, help='default bookcorpus, wikipedia')
@@ -225,12 +225,6 @@ if __name__ == '__main__':
     os.environ['MASKING_P'] = str(args.p)
 
     os.environ['ITERATION_STEP'] = str(0)
-    os.environ['EXP_NAME'] = '-'.join(
-        ['lmcd', os.environ['WANDB_PROJECT'], str(datetime.datetime.now().strftime("%y%m%d-%H%M%S"))])
-
-    os.environ['LOG_DIR'] = f'./logs/{os.environ["EXP_NAME"]}'
-    os.mkdir(os.environ['LOG_DIR'])
-    os.mkdir(os.path.join(os.environ['LOG_DIR'], 'batch'))
 
     np.random.seed(args.seed)
 
