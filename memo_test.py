@@ -12,12 +12,12 @@ from sklearn.metrics import accuracy_score
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_type', default="bert-base-cased")
-parser.add_argument('--ckpt', default='./ckpts/bert-base-p20-ada/checkpoint-15000-v5')
 
 parser.add_argument('--data_type', default='huggingface')
-parser.add_argument('--data', default='bookcorpus', required=False, help='default bookcorpus, wikipedia')
+parser.add_argument('--data', default='squad', required=False, help='default')
 parser.add_argument('--use_partial_data', default=True, required=False)
 parser.add_argument('--partial_data_size', default=8, type=int, required=False)
+parser.add_argument('--split_test', default=0.2, type=float)
 
 parser.add_argument('--seed', default=123, type=int)
 
@@ -191,6 +191,9 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
         embs = embs.cpu().detach().numpy()
 
 
+
+
+
 def print_fmt(_name, _val):
     print(f'{_name} {np.mean(_val)} +- {np.std(_val)} : {np.mean(_val): .2f}({np.std(_val): .2f})')
 
@@ -214,10 +217,7 @@ if __name__ == '__main__':
                   'logging_steps': args.logging_steps, 'save_steps': args.save_steps}
 
     dataset = get_dataset(args.data_type, args.data)
-    if args.use_partial_data:
-        dataset['train'] = dataset['train'].shard(args.partial_data_size, index=0)
-    if 'unsupervised' in dataset.keys():
-        del dataset['unsupervised']
+    dataset = dataset['train'].train_test_split(args.split_test)
     tokenizer = AutoTokenizer.from_pretrained(args.model_type)
     tokenized_datasets = dataset.map(tokenize_function,
                                      batched=True, remove_columns=list(dataset['train'].features.keys()),
@@ -230,9 +230,6 @@ if __name__ == '__main__':
     dataset = lm_datasets
 
     mlm_collator = CustomMLMCollator(tokenizer, args.p)
-
-    if isinstance(dataset, dict) and ('test' not in dataset.keys()):
-        dataset = dataset['train'].train_test_split(0.01)
 
     print(dataset)
     print(f'ckpt : {args.ckpt}')
