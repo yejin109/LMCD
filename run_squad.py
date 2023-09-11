@@ -162,7 +162,10 @@ if __name__ == '__main__':
     os.mkdir(os.path.join(os.environ['LOG_DIR'], 'batch'))
 
     np.random.seed(args.seed)
-    model = AutoModelForQuestionAnswering.from_pretrained(args.ckpt)
+
+    _model_path = args.model_type
+    model = AutoModelForQuestionAnswering.from_pretrained(_model_path)
+    # model = AutoModelForQuestionAnswering.from_pretrained(args.ckpt)
     tokenizer = AutoTokenizer.from_pretrained(args.model_type)
 
     train_args = {'learning_rate': args.lr, 'num_train_epochs': args.epochs, 'weight_decay': args.wd,
@@ -190,4 +193,5 @@ if __name__ == '__main__':
     tokenized_datasets['test'] = eval_dataset
     print(tokenized_datasets)
     metric = load_metric(args.data)
-    train(model, tokenized_datasets, train_args, tokenizer, eval_examples=dataset['test'])
+    # train(model, tokenized_datasets, train_args, tokenizer, eval_examples=dataset['test'])
+

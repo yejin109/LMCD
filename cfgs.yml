@@ -1,0 +1,15 @@
+MLM:
+  - bert-base-uncased
+  - bert-large-uncased
+  - prajjwal1/bert-tiny
+  - prajjwal1/bert-mini
+  - prajjwal1/bert-small
+  - prajjwal1/bert-medium
+  - roberta-base
+  - roberta-large
+  - albert-base-v2
+  - albert-large-v2
+  - albert-xlarge-v2
+  - albert-xxlarge-v2
+  - distilbert-base-cased
+  - google/bigbird-roberta-large

@@ -7,17 +7,19 @@ import torch.nn as nn
 from data import get_dataset, get_data, CustomMLMCollator
 import numpy as np
 from transformers import AutoModelForMaskedLM, TrainingArguments, AutoTokenizer
+from datasets import load_dataset
 from sklearn.metrics import accuracy_score
+from template import distilbert, glue, bookcorpus, bert
+import yaml
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model_type', default="bert-base-cased")
+parser.add_argument('--model_type', default="prajjwal1/bert-tiny")
 
 parser.add_argument('--data_type', default='huggingface')
-parser.add_argument('--data', default='squad', required=False, help='default')
-parser.add_argument('--use_partial_data', default=True, required=False)
-parser.add_argument('--partial_data_size', default=8, type=int, required=False)
-parser.add_argument('--split_test', default=0.2, type=float)
+parser.add_argument('--task_name', default='sst2', type=str)
+parser.add_argument('--data', default='bookcorpus', required=False, help='default glue, bookcorpus, wikipedia')
+parser.add_argument('--train_test_split', default=0.0005, type=float, required=False)
 
 parser.add_argument('--seed', default=123, type=int)
 
@@ -44,6 +46,9 @@ parser.add_argument('--test', default=False, required=False, action=argparse.Boo
 # Log
 parser.add_argument('--logging_steps', type=int, default=100)
 parser.add_argument('--save_steps', type=int, default=20000)
+
+
+cfgs = yaml.load(open('./cfgs.yml'), Loader=yaml.FullLoader)
 
 
 def get_token_acc(_logits, _labels):
@@ -85,12 +90,47 @@ def get_rankme(_repre, eps=1e-6):
     return rankme
 
 
-def get_memorization(_data: torch.Tensor, _model, mask_token_id):
+def get_memorization_mlm(_data: torch.Tensor, _model, mask_token_id):
+    def get_mask(_datum):
+        special_token_indicator = np.array(tokenizer.get_special_tokens_mask(_datum, already_has_special_tokens=True)).astype(bool)
+        ids = np.arange(len(_datum)).astype(int)
+        res = np.random.choice(ids[~special_token_indicator])
+        return res
     _inps = _data.clone()
     _batch_size = _inps.size(0)
     _chunk_size = _inps.size(1)
 
-    mask = np.random.choice(np.arange(_chunk_size).astype(int), size=(_batch_size, ))
+    mask = list(map(lambda x: get_mask(x), _data))
+    # mask = np.random.choice(np.arange(_chunk_size).astype(int), size=(_batch_size, ))
+    mask_onehot = nn.functional.one_hot(torch.Tensor(mask).long().to('cuda:0'), num_classes=_chunk_size).bool()
+
+    _labels = _inps.clone()
+    _labels[~mask_onehot] = -100
+
+    _inps[mask_onehot] = mask_token_id
+
+    with torch.no_grad():
+        _output = _model(_inps)
+    _logits = _output['logits'].detach().cpu().numpy()
+    _preds = _logits.argmax(-1)
+
+    _labels = _labels.detach().cpu().numpy()
+    mask_onehot = mask_onehot.detach().cpu().numpy()
+    return np.mean(_preds[mask_onehot] == _labels[mask_onehot])
+
+
+def get_memorization_clm(_data: torch.Tensor, _model, mask_token_id):
+    def get_mask(_datum):
+        special_token_indicator = np.array(tokenizer.get_special_tokens_mask(_datum, already_has_special_tokens=True)).astype(bool)
+        ids = np.arange(len(_datum)).astype(int)
+        res = np.random.choice(ids[~special_token_indicator])
+        return res
+    _inps = _data.clone()
+    _batch_size = _inps.size(0)
+    _chunk_size = _inps.size(1)
+
+    mask = list(map(lambda x: get_mask(x), _data))
+    # mask = np.random.choice(np.arange(_chunk_size).astype(int), size=(_batch_size, ))
     mask_onehot = nn.functional.one_hot(torch.Tensor(mask).long().to('cuda:0'), num_classes=_chunk_size).bool()
 
     _labels = _inps.clone()
@@ -125,7 +165,11 @@ def evaluate(_model, _dataset):
             org_id = org_ids[i*args.b_eval:(i+1)*args.b_eval].to('cuda:0')
             if len(org_id) == 0:
                 break
-            _memo += get_memorization(org_id, _model, mlm_collator.tokenizer.convert_tokens_to_ids(mlm_collator.tokenizer.mask_token))
+            if args.model_type in cfgs['MLM']:
+                _memo += get_memorization_mlm(org_id, _model, tokenizer.convert_tokens_to_ids(tokenizer.mask_token))
+            elif MODEL_ARCH[args.model_type] == 'CLM':
+                raise KeyError("NOT IMPLEMENTED")
+                # _memo += get_memorization_mlm(org_id, _model, tokenizer.convert_tokens_to_ids(tokenizer.mask_token))
 
             # org_id, org_labels = mlm_collator.masking_tokens(org_id, args.p)
             #
@@ -155,45 +199,6 @@ def evaluate(_model, _dataset):
     return _loss, _acc, _entropy, _rankme_emb, _rankme_repre, _memo
 
 
-def tokenize_function(examples, _tokenizer=None):
-    result = _tokenizer(examples["text"])
-    if _tokenizer.is_fast:
-        result["word_ids"] = [result.word_ids(i) for i in range(len(result["input_ids"]))]
-    return result
-
-
-def group_texts(examples, _chunk_size=None):
-    # Concatenate all texts
-    concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
-
-    # Compute length of concatenated texts
-    total_length = len(concatenated_examples[list(examples.keys())[0]])
-    # We drop the last chunk if it's smaller than chunk_size
-    total_length = (total_length // _chunk_size) * _chunk_size
-
-    # Split by chunks of max_len
-    result = {
-        k: [t[i: i + _chunk_size] for i in range(0, total_length, _chunk_size)]
-        for k, t in concatenated_examples.items()
-    }
-
-    # Create a new labels column
-    result["labels"] = result["input_ids"].copy()
-    return result
-
-
-def compute_metrics(eval_preds, _model, eps=1e-6):
-    # RankMe
-    preds, labels, inps = eval_preds
-    with torch.no_grad():
-        _model.eval()
-        embs = _model.bert.embeddings(torch.Tensor(inps).to('cuda:0').long())
-        embs = embs.cpu().detach().numpy()
-
-
-
-
-
 def print_fmt(_name, _val):
     print(f'{_name} {np.mean(_val)} +- {np.std(_val)} : {np.mean(_val): .2f}({np.std(_val): .2f})')
 
@@ -206,33 +211,27 @@ if __name__ == '__main__':
     os.environ['ITERATION_STEP'] = str(0)
 
     np.random.seed(args.seed)
+    # ['bert-base-uncased', 'bert-large-uncased', 'prajjwal1/bert-tiny', 'prajjwal1/bert-mini', 'prajjwal1/bert-small',
+    #  'prajjwal1/bert-medium', 'roberta-base', 'roberta-large', 'albert-base-v2', 'albert-large-v2', 'albert-xlarge-v2']
+    if args.model_type == "distilbert-base-uncased":
+        model = distilbert.get_model(args.model_type)
+        tokenizer = distilbert.get_tokenizer(args.model_type)
+    elif args.model_type in cfgs['MLM']:
+        model = bert.get_model(args.model_type)
+        tokenizer = bert.get_tokenizer(args.model_type)
+    else:
+        raise KeyError("NO MODEL")
 
-    _model_path = args.ckpt if args.ckpt is not None else args.model_type
-    model = AutoModelForMaskedLM.from_pretrained(_model_path)
-
-    train_args = {'learning_rate': args.lr, 'num_train_epochs': args.epochs, 'weight_decay': args.wd,
-                  'per_device_train_batch_size': args.b_train, 'per_device_eval_batch_size': args.b_eval,
-                  'do_eval': True, 'do_train': True,
-                  'max_steps': args.max_steps,
-                  'logging_steps': args.logging_steps, 'save_steps': args.save_steps}
-
-    dataset = get_dataset(args.data_type, args.data)
-    dataset = dataset['train'].train_test_split(args.split_test)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_type)
-    tokenized_datasets = dataset.map(tokenize_function,
-                                     batched=True, remove_columns=list(dataset['train'].features.keys()),
-                                     fn_kwargs={'_tokenizer': tokenizer})
-    chunk_size = args.chunk_size
-    lm_datasets = tokenized_datasets.map(group_texts,
-                                         batched=True,
-                                         fn_kwargs={'_chunk_size': chunk_size})
-    lm_datasets.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
-    dataset = lm_datasets
-
-    mlm_collator = CustomMLMCollator(tokenizer, args.p)
+    if args.data == "glue":
+        dataset = glue.get_dataset(args.task_name)
+        dataset = glue.preprocess(args.task_name, args.model_type, dataset, model, tokenizer)
+    elif args.data == 'bookcorpus':
+        dataset = bookcorpus.get_dataset(args.data, only_test=True, train_test_split=args.train_test_split)
+        dataset = bookcorpus.preprocess(dataset, tokenizer)
+    else:
+        raise KeyError("NO DATA")
 
     print(dataset)
-    print(f'ckpt : {args.ckpt}')
     losses = []
     acces = []
     entropies = []
@@ -254,4 +253,3 @@ if __name__ == '__main__':
     # print_fmt('Entropy', entropies)
     # print_fmt('RankMe:emb', rankme_embs)
     # print_fmt('RankMe:repre', rankme_repreps)
-
