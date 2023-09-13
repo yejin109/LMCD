@@ -167,7 +167,7 @@ def evaluate(_model, _dataset):
                 break
             if args.model_type in cfgs['MLM']:
                 _memo += get_memorization_mlm(org_id, _model, tokenizer.convert_tokens_to_ids(tokenizer.mask_token))
-            elif MODEL_ARCH[args.model_type] == 'CLM':
+            elif args.model_type in cfgs['CLM']:
                 raise KeyError("NOT IMPLEMENTED")
                 # _memo += get_memorization_mlm(org_id, _model, tokenizer.convert_tokens_to_ids(tokenizer.mask_token))
 
@@ -211,8 +211,6 @@ if __name__ == '__main__':
     os.environ['ITERATION_STEP'] = str(0)
 
     np.random.seed(args.seed)
-    # ['bert-base-uncased', 'bert-large-uncased', 'prajjwal1/bert-tiny', 'prajjwal1/bert-mini', 'prajjwal1/bert-small',
-    #  'prajjwal1/bert-medium', 'roberta-base', 'roberta-large', 'albert-base-v2', 'albert-large-v2', 'albert-xlarge-v2']
     if args.model_type == "distilbert-base-uncased":
         model = distilbert.get_model(args.model_type)
         tokenizer = distilbert.get_tokenizer(args.model_type)

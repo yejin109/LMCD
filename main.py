@@ -2,17 +2,19 @@ import datetime
 import os
 import argparse
 
+import torch.nn as nn
 import torch
 from data import get_dataset, get_data, CustomMLMCollator
 from _utils import CustomWandbCallback, AscMaskCallBack, AdaMaskCallBack
 import numpy as np
-from transformers import AutoModelForMaskedLM, TrainingArguments, AutoTokenizer
+from transformers import AutoModelForMaskedLM, TrainingArguments, AutoTokenizer, AutoConfig
 from sklearn.metrics import accuracy_score
 from huggingface import CustomTrainer
+from accelerate import init_empty_weights
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model_type', default="prajjwal1/bert-medium")
+parser.add_argument('--model_type', default="prajjwal1/bert-tiny")
 parser.add_argument('--ckpt', default=None)
 
 parser.add_argument('--data_type', default='huggingface')
@@ -33,18 +35,17 @@ parser.add_argument('--chunk_size', default=64, type=int)
 # train
 parser.add_argument('--lr', default=2e-5)
 parser.add_argument('--wd', default=1e-2)
-parser.add_argument('--epochs', default=30)
-parser.add_argument('--b_train', default=8, type=int)
-parser.add_argument('--max_steps', type=int, default=20000)
+parser.add_argument('--epochs', default=1)
+parser.add_argument('--b_train', default=128, type=int)
+# parser.add_argument('--max_steps', type=int, default=200000)
 
 parser.add_argument('--p', default=.20, type=float)
 parser.add_argument('--ada_mask', default=False, required=False, action=argparse.BooleanOptionalAction)
 parser.add_argument('--entropy', default=False, required=False, action=argparse.BooleanOptionalAction)
 parser.add_argument('--mrd', default=False, required=False, action=argparse.BooleanOptionalAction)
 
-
 # Validation
-parser.add_argument('--b_eval', default=8, type=int)
+parser.add_argument('--b_eval', default=256, type=int)
 parser.add_argument('--shard_eval', default=300, type=int)
 
 # Test
@@ -52,7 +53,7 @@ parser.add_argument('--test', default=False, required=False, action=argparse.Boo
 
 # Log
 parser.add_argument('--logging_steps', type=int, default=100)
-parser.add_argument('--save_steps', type=int, default=5000)
+parser.add_argument('--save_steps', type=int, default=2000)
 
 
 def train(_model, _dataset, _train_args, _tk, sharding_size=600):
@@ -81,7 +82,7 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
         data_collator=mlm_collator,
         compute_metrics=compute_metrics,
     )
-    trainer.add_callback(CustomWandbCallback)
+    # trainer.add_callback(CustomWandbCallback)
     if args.mrd:
         trainer.add_callback(AscMaskCallBack)
     if args.ada_mask:
@@ -92,6 +93,8 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
         print(f"Evaludation : {eval_res['eval_loss']}")
     else:
         trainer.train()
+
+    trainer.save_model()
 
 
 def tokenize_function(examples, _tokenizer=None):
@@ -141,8 +144,41 @@ def get_token_acc(preds, labels):
     return acc_token
 
 
+def get_memorization(_data: torch.Tensor, _model, mask_token_id):
+    if ~ isinstance(_data, torch.Tensor):
+        _data = torch.tensor(_data).long()
+        _data = _data.to('cuda:0')
+
+    _inps = _data.clone()
+    _batch_size = _inps.size(0)
+    _chunk_size = _inps.size(1)
+
+    mask = np.random.choice(np.arange(_chunk_size).astype(int), size=(_batch_size, ))
+    mask_onehot = nn.functional.one_hot(torch.Tensor(mask).long().to('cuda:0'), num_classes=_chunk_size).bool()
+
+    _labels = _inps.clone()
+    _labels[~mask_onehot] = -100
+
+    _inps[mask_onehot] = mask_token_id
+
+    with torch.no_grad():
+        _output = _model(_inps)
+    _logits = _output['logits'].detach().cpu().numpy()
+    _preds = _logits.argmax(-1)
+
+    _labels = _labels.detach().cpu().numpy()
+    mask_onehot = mask_onehot.detach().cpu().numpy()
+    return np.mean(_preds[mask_onehot] == _labels[mask_onehot])
+
+
 def compute_metrics(eval_preds, _model, eps=1e-6):
     write_env_var('EVAL_CNT', str(0))
+    # Memorize
+    preds, labels, inps = eval_preds
+    with torch.no_grad():
+        _memo = get_memorization(inps, _model,
+                              mlm_collator.tokenizer.convert_tokens_to_ids(mlm_collator.tokenizer.mask_token))
+
     # Entropy
     preds, labels, inps = eval_preds
     mask = labels != -100
@@ -150,16 +186,16 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
     entropy = - np.sum(np.exp(log_probs) * log_probs, axis=-1)
     entropy = entropy[mask].mean(axis=-1)
 
-    # RankMe
-    preds, labels, inps = eval_preds
-    with torch.no_grad():
-        _model.eval()
-        embs = _model.bert.embeddings(torch.Tensor(inps).to('cuda:0').long())
-        embs = embs.cpu().detach().numpy()
-    _, singular_vals, _ = np.linalg.svd(embs)
-
-    p = singular_vals / singular_vals.sum(axis=1, keepdims=True) + eps
-    rankme = np.exp((- p * np.log(p)).sum(axis=1)).mean()
+    # # RankMe
+    # preds, labels, inps = eval_preds
+    # with torch.no_grad():
+    #     _model.eval()
+    #     embs = _model.bert.embeddings(torch.Tensor(inps).to('cuda:0').long())
+    #     embs = embs.cpu().detach().numpy()
+    # _, singular_vals, _ = np.linalg.svd(embs)
+    #
+    # p = singular_vals / singular_vals.sum(axis=1, keepdims=True) + eps
+    # rankme = np.exp((- p * np.log(p)).sum(axis=1)).mean()
 
     # P_err
     preds, labels, inps = eval_preds
@@ -248,7 +284,8 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
         'P_err': p_err,
         'Token_acc': acc_token,
         'Metric': metric_cur,
-        'RankMe': rankme,
+        'Memorization': _memo,
+        # 'RankMe': rankme,
         'Entropy': entropy,
         'Token_acc_org': org_acc}
     return eval_res
@@ -263,7 +300,7 @@ if __name__ == '__main__':
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
     os.environ['VOCAB_SIZE'] = str(args.v)
     os.environ['SEQ_LEN'] = str(args.n)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v5'
+    os.environ['WANDB_PROJECT'] = args.data + ' - v6'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
@@ -276,12 +313,16 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
 
     _model_path = args.ckpt if args.ckpt is not None else args.model_type
-    model = AutoModelForMaskedLM.from_pretrained(_model_path)
-
+    _model_kwargs = {
+        '_fast_init': False
+    }
+    # V6 : Randomly initialize model
+    config = AutoConfig.from_pretrained(_model_path)
+    model = AutoModelForMaskedLM.from_config(config)
     train_args = {'learning_rate': args.lr, 'num_train_epochs': args.epochs, 'weight_decay': args.wd,
                   'per_device_train_batch_size': args.b_train, 'per_device_eval_batch_size': args.b_eval,
                   'do_eval': True, 'do_train': True,
-                  'max_steps': args.max_steps,
+                  # 'max_steps': args.max_steps,
                   'logging_steps': args.logging_steps, 'save_steps': args.save_steps}
 
     if args.data_type == 'synthetic':
