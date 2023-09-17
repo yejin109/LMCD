@@ -16,3 +16,8 @@ Once we populate systhetic dataset, we use dataset interface from huggingface so
 
 ## Special tokens information
   - [MASK] : 0 
+
+# Version
+
+- V6 : Token acc를 기준으로 update를 하는 것
+- V7 : Memorization을 기준으로 update를 하는 것

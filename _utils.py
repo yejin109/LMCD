@@ -1,6 +1,8 @@
 import os
 import wandb
-from transformers.integrations import WandbCallback, TrainerCallback
+import numpy as np
+from transformers.integrations import WandbCallback
+from transformers import TrainerCallback
 from transformers.trainer import TrainerState, TrainingArguments, TrainerControl
 
 
@@ -92,10 +94,27 @@ class AdaMaskCallBack(TrainerCallback):
         _p = float(os.environ['MASKING_P'])
         _increment = 100/20000
         ticker = os.environ['P_TICKER']
+        if _p < 0.10:
+            return
         if ticker == 'UP':
             os.environ['MASKING_P'] = str(_p + _increment)
         elif ticker == 'DOWN':
             os.environ['MASKING_P'] = str(_p - _increment)
+
+
+class StepMaskCallBack(TrainerCallback):
+    def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        if state.global_step > state.max_steps / 2:
+            _p = float(os.environ['MASKING_P_INIT']) * 2
+            os.environ['MASKING_P'] = str(_p)
+
+
+class CosineMaskCallBack(TrainerCallback):
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        _p = float(os.environ['MASKING_P_INIT'])
+        theta = state.global_step/state.max_steps
+        new_p = 0.1 * np.cos(np.pi*(1+theta))+0.3
+        os.environ['MASKING_P'] = str(new_p)
 
 
 def rewrite_logs(d):

@@ -1,7 +1,9 @@
+import yaml
+import wandb
 import datetime
 import os
 import argparse
-import math
+import torch
 from data import get_dataset
 from _utils import CustomWandbCallback
 import numpy as np
@@ -13,37 +15,34 @@ from qa import postprocess_qa_predictions, QuestionAnsweringTrainer, prepare_val
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', default=123, type=int)
 
-parser.add_argument('--model_type', default="prajjwal1/bert-medium")
-parser.add_argument('--ckpt', default="./logs/bert-medium-p20-ada-v5/checkpoint-20000")
-
-# parser.add_argument('--model_type', default="bert-base-cased")
-# parser.add_argument('--ckpt', default="./logs/bert-base-p40-const/checkpoint-20000")
+parser.add_argument('--model_type', default="prajjwal1/bert-tiny")
+parser.add_argument('--ckpt', default="./ckpts/bert-tiny-p20-const-v6/checkpoint-36000")
 
 parser.add_argument('--data_type', default='huggingface')
-parser.add_argument('--split_load', default=10000, type=int)
+parser.add_argument('--split_load', default=None, type=int)
 parser.add_argument('--data', default='squad', required=False, help='default squad')
 parser.add_argument('--split_test', default=0.2, type=float)
 
 parser.add_argument('--chunk_size', default=64, type=int)
 
 # train
-parser.add_argument('--lr', default=2e-5)
-parser.add_argument('--epochs', default=3, help='num_train_epochs')
+parser.add_argument('--lr', default=2e-4)
+parser.add_argument('--epochs', default=2, help='num_train_epochs')
 parser.add_argument('--wd', default=1e-2, help='weight decay')
 parser.add_argument('--max_steps', type=int, default=20000)
-parser.add_argument('--b_train', default=8, type=int)
+parser.add_argument('--b_train', default=128, type=int)
 
 # Test
-parser.add_argument('--b_eval', default=8, type=int)
+parser.add_argument('--b_eval', default=256, type=int)
 parser.add_argument('--shard_eval', default=300, type=int)
 
 # Log
-parser.add_argument('--logging_steps', type=int, default=50)
+parser.add_argument('--logging_steps', type=int, default=500)
 parser.add_argument('--save_steps', type=int, default=20000)
 
 
 def train(_model, _dataset, _train_args, _tk, eval_examples):
-    _run_name = [args.ckpt.split('/')[2], str(args.seed)]
+    _run_name = [args.ckpt.split('/')[2], 'ckpt', args.ckpt.split('/')[3].split('-')[1],  str(args.seed)]
 
     training_args = TrainingArguments(
         output_dir=os.environ['LOG_DIR'],
@@ -68,6 +67,7 @@ def train(_model, _dataset, _train_args, _tk, eval_examples):
     trainer.add_callback(CustomWandbCallback)
 
     trainer.train()
+    trainer.evaluate()
 
 
 def preprocess_function(examples):
@@ -148,10 +148,21 @@ def compute_metric(p: EvalPrediction):
 
 
 if __name__ == '__main__':
+    credential = yaml.load(open('./credential.yml'), Loader=yaml.FullLoader)
+    wandb.login(key=credential['wandb']['key'])
+
+    os.environ['WANDB_ENTITY'] = 'yejin109/lmcd'
+    os.environ['WANDB_WATCH'] = 'all'
+
+    os.environ['VERBOSE'] = "0"
+    os.environ['DEVICE'] = 'cuda:0'
+
+    torch.backends.cudnn.benchmark = True
+
     args = parser.parse_args()
     os.environ['CACHE_DIR'] = 'C:/Users/ay011/.cache/huggingface/datasets'
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v5'
+    os.environ['WANDB_PROJECT'] = args.data + ' - v6'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
@@ -174,7 +185,14 @@ if __name__ == '__main__':
                   'logging_steps': args.logging_steps, 'save_steps': args.save_steps}
 
     dataset = get_dataset(args.data_type, args.data, split=args.split_load)
-    dataset = dataset.train_test_split(args.split_test)
+
+    if 'validation' in dataset.keys():
+        dataset['test'] = dataset['validation']
+        del dataset['validation']
+
+    if not isinstance(dataset, dict):
+        dataset = dataset.train_test_split(args.split_test)
+
     column_names = dataset["test"].column_names
     answer_column_name = "answers" if "answers" in column_names else column_names[2]
     question_column_name = "question" if "question" in column_names else column_names[0]
@@ -189,9 +207,9 @@ if __name__ == '__main__':
                 desc="Running tokenizer on validation dataset",
                 fn_kwargs={'max_seq_length': args.chunk_size, 'question_column_name': question_column_name, 'context_column_name':context_column_name, 'tokenizer': tokenizer}
             )
-    eval_dataset = eval_dataset.shard(int(math.floor(len(eval_dataset)/5000)), index=0)
+    # eval_dataset = eval_dataset.shard(int(math.floor(len(eval_dataset)/500)), index=0)
     tokenized_datasets['test'] = eval_dataset
     print(tokenized_datasets)
     metric = load_metric(args.data)
-    # train(model, tokenized_datasets, train_args, tokenizer, eval_examples=dataset['test'])
+    train(model, tokenized_datasets, train_args, tokenizer, eval_examples=dataset['test'])
 

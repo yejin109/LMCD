@@ -5,12 +5,11 @@ import argparse
 import torch.nn as nn
 import torch
 from data import get_dataset, get_data, CustomMLMCollator
-from _utils import CustomWandbCallback, AscMaskCallBack, AdaMaskCallBack
+from _utils import CustomWandbCallback, AscMaskCallBack, AdaMaskCallBack, StepMaskCallBack, CosineMaskCallBack
 import numpy as np
 from transformers import AutoModelForMaskedLM, TrainingArguments, AutoTokenizer, AutoConfig
 from sklearn.metrics import accuracy_score
 from huggingface import CustomTrainer
-from accelerate import init_empty_weights
 
 
 parser = argparse.ArgumentParser()
@@ -20,7 +19,7 @@ parser.add_argument('--ckpt', default=None)
 parser.add_argument('--data_type', default='huggingface')
 parser.add_argument('--data', default='bookcorpus', required=False, help='default bookcorpus, wikipedia')
 parser.add_argument('--use_partial_data', default=True, required=False)
-parser.add_argument('--partial_data_size', default=8, type=int, required=False)
+parser.add_argument('--partial_data_size', default=4, type=int, required=False)
 
 # Synthetic data
 parser.add_argument('--v', default=2, type=int)
@@ -37,10 +36,13 @@ parser.add_argument('--lr', default=2e-5)
 parser.add_argument('--wd', default=1e-2)
 parser.add_argument('--epochs', default=1)
 parser.add_argument('--b_train', default=128, type=int)
-# parser.add_argument('--max_steps', type=int, default=200000)
+parser.add_argument('--max_steps', type=int, default=40000)
 
 parser.add_argument('--p', default=.20, type=float)
 parser.add_argument('--ada_mask', default=False, required=False, action=argparse.BooleanOptionalAction)
+parser.add_argument('--cosine', default=False, required=False, action=argparse.BooleanOptionalAction)
+parser.add_argument('--step', default=False, required=False, action=argparse.BooleanOptionalAction)
+
 parser.add_argument('--entropy', default=False, required=False, action=argparse.BooleanOptionalAction)
 parser.add_argument('--mrd', default=False, required=False, action=argparse.BooleanOptionalAction)
 
@@ -64,12 +66,18 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
         _run_name.insert(1, 'MRD')
     elif args.entropy:
         _run_name.insert(1, 'Entropy')
+    elif args.cosine:
+        _run_name.insert(1, 'Cosine')
+    elif args.step:
+        _run_name.insert(1, 'Step')
     else:
         _run_name.insert(1, 'Const-Mask')
+    _run_name = '-'.join(_run_name)
+    print(f"Run Name : {_run_name}")
     training_args = TrainingArguments(
         output_dir=os.environ['LOG_DIR'],
         evaluation_strategy="steps",  # candidates : steps, epochs
-        run_name='-'.join(_run_name),
+        run_name=_run_name,
         include_inputs_for_metrics=True,
         **_train_args,
     )
@@ -82,17 +90,22 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
         data_collator=mlm_collator,
         compute_metrics=compute_metrics,
     )
-    # trainer.add_callback(CustomWandbCallback)
+    trainer.add_callback(CustomWandbCallback)
     if args.mrd:
         trainer.add_callback(AscMaskCallBack)
     if args.ada_mask:
         trainer.add_callback(AdaMaskCallBack)
+    if args.cosine:
+        trainer.add_callback(CosineMaskCallBack)
+    if args.step:
+        trainer.add_callback(StepMaskCallBack)
 
     if args.test:
         eval_res = trainer.evaluate()
         print(f"Evaludation : {eval_res['eval_loss']}")
     else:
         trainer.train()
+        trainer.evaluate()
 
     trainer.save_model()
 
@@ -233,6 +246,7 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
     write_env_var('P_METRIC', str(metric_cur))
     write_env_var('ENTROPY', str(entropy))
     write_env_var('P_CNT', str(0))
+    write_env_var('MEMORIZATION', str(_memo))
 
     if args.ada_mask:
         _increment = 0.01
@@ -241,14 +255,26 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
         _p_cnt = int(os.environ['P_CNT'])
 
         if args.ada_mask:
-            current_acc = org_acc
-            past_acc = float(os.environ['TOKEN_ACC_ORG'])
+            # # V6 : use Token acc
+            # current_acc = org_acc
+            # past_acc = float(os.environ['TOKEN_ACC_ORG'])
+            # if current_acc > past_acc + 0.01:
+            #     os.environ['P_TICKER'] = 'UP'
+            # elif current_acc < past_acc - 0.01:
+            #     os.environ['P_TICKER'] = 'DOWN'
+            # else:
+            #     os.environ['P_TICKER'] = 'STAY'
+
+            # V7 : use memorization
+            current_acc = _memo
+            past_acc = float(os.environ['MEMORIZATION'])
             if current_acc > past_acc + 0.01:
                 os.environ['P_TICKER'] = 'UP'
             elif current_acc < past_acc - 0.01:
                 os.environ['P_TICKER'] = 'DOWN'
             else:
                 os.environ['P_TICKER'] = 'STAY'
+
             # metric_past = float(os.environ['P_METRIC'])
             # if metric_cur > metric_past + 0.02:
             #     if _p_cnt < _tolerance:
@@ -300,7 +326,7 @@ if __name__ == '__main__':
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
     os.environ['VOCAB_SIZE'] = str(args.v)
     os.environ['SEQ_LEN'] = str(args.n)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v6'
+    os.environ['WANDB_PROJECT'] = args.data + ' - v7'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(

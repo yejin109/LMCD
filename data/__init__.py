@@ -15,6 +15,8 @@ def get_dataset(_data_type, data=None, split=None):
         if data == 'wikipedia':
             res = load_dataset(data, '20220301.en', cache_dir=os.environ['CACHE_DIR'])
             res = res.remove_columns(["id", 'title', 'url'])
+
+
             return res
         else:
             return load_dataset(data, cache_dir=os.environ['CACHE_DIR'], **kwargs)
