@@ -18,7 +18,7 @@ parser.add_argument('--ckpt', default=None)
 
 parser.add_argument('--data_type', default='huggingface')
 parser.add_argument('--data', default='bookcorpus', required=False, help='default bookcorpus, wikipedia')
-parser.add_argument('--use_partial_data', default=True, required=False)
+parser.add_argument('--use_partial_data', default=False, required=False)
 parser.add_argument('--partial_data_size', default=4, type=int, required=False)
 
 # Synthetic data
@@ -29,7 +29,7 @@ parser.add_argument('--dist', default='SRS',
 parser.add_argument('--seed', default=123, type=int)
 parser.add_argument('--n', default=10, type=int)
 parser.add_argument('--D', default=10000)
-parser.add_argument('--chunk_size', default=64, type=int)
+parser.add_argument('--chunk_size', default=128, type=int)
 
 # train
 parser.add_argument('--lr', default=2e-5)
@@ -39,7 +39,8 @@ parser.add_argument('--b_train', default=128, type=int)
 parser.add_argument('--max_steps', type=int, default=40000)
 
 parser.add_argument('--p', default=.20, type=float)
-parser.add_argument('--ada_mask', default=False, required=False, action=argparse.BooleanOptionalAction)
+parser.add_argument('--ada_token', default=False, required=False, action=argparse.BooleanOptionalAction)
+parser.add_argument('--ada_memo', default=False, required=False, action=argparse.BooleanOptionalAction)
 parser.add_argument('--cosine', default=False, required=False, action=argparse.BooleanOptionalAction)
 parser.add_argument('--step', default=False, required=False, action=argparse.BooleanOptionalAction)
 
@@ -48,20 +49,22 @@ parser.add_argument('--mrd', default=False, required=False, action=argparse.Bool
 
 # Validation
 parser.add_argument('--b_eval', default=256, type=int)
-parser.add_argument('--shard_eval', default=300, type=int)
+parser.add_argument('--shard_eval', default=1000, type=int)
 
 # Test
 parser.add_argument('--test', default=False, required=False, action=argparse.BooleanOptionalAction)
 
 # Log
-parser.add_argument('--logging_steps', type=int, default=100)
-parser.add_argument('--save_steps', type=int, default=2000)
+parser.add_argument('--logging_steps', type=int, default=1000)
+parser.add_argument('--save_steps', type=int, default=4000)
 
 
 def train(_model, _dataset, _train_args, _tk, sharding_size=600):
     _run_name = [args.model_type, os.environ['MASKING_P'], str(args.seed)]
-    if args.ada_mask:
-        _run_name.insert(1, 'Ada-Mask')
+    if args.ada_memo:
+        _run_name.insert(1, 'AdaMemo')
+    elif args.ada_token:
+        _run_name.insert(1, 'AdaToken')
     elif args.mrd:
         _run_name.insert(1, 'MRD')
     elif args.entropy:
@@ -71,7 +74,7 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
     elif args.step:
         _run_name.insert(1, 'Step')
     else:
-        _run_name.insert(1, 'Const-Mask')
+        _run_name.insert(1, 'Const')
     _run_name = '-'.join(_run_name)
     print(f"Run Name : {_run_name}")
     training_args = TrainingArguments(
@@ -93,7 +96,7 @@ def train(_model, _dataset, _train_args, _tk, sharding_size=600):
     trainer.add_callback(CustomWandbCallback)
     if args.mrd:
         trainer.add_callback(AscMaskCallBack)
-    if args.ada_mask:
+    if args.ada_token or args.ada_memo:
         trainer.add_callback(AdaMaskCallBack)
     if args.cosine:
         trainer.add_callback(CosineMaskCallBack)
@@ -248,32 +251,31 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
     write_env_var('P_CNT', str(0))
     write_env_var('MEMORIZATION', str(_memo))
 
-    if args.ada_mask:
-        _increment = 0.01
-        _tolerance = 3
+    if args.ada_token:
+        _tolerance = 0.01
 
         _p_cnt = int(os.environ['P_CNT'])
+        # V6 : use Token acc
+        current_acc = org_acc
+        past_acc = float(os.environ['TOKEN_ACC_ORG'])
+        if current_acc > past_acc + _tolerance:
+            os.environ['P_TICKER'] = 'UP'
+        elif current_acc < past_acc - _tolerance:
+            os.environ['P_TICKER'] = 'DOWN'
+        else:
+            os.environ['P_TICKER'] = 'STAY'
+    if args.ada_memo:
+        _tolerance = 0.05
 
-        if args.ada_mask:
-            # # V6 : use Token acc
-            # current_acc = org_acc
-            # past_acc = float(os.environ['TOKEN_ACC_ORG'])
-            # if current_acc > past_acc + 0.01:
-            #     os.environ['P_TICKER'] = 'UP'
-            # elif current_acc < past_acc - 0.01:
-            #     os.environ['P_TICKER'] = 'DOWN'
-            # else:
-            #     os.environ['P_TICKER'] = 'STAY'
-
-            # V7 : use memorization
-            current_acc = _memo
-            past_acc = float(os.environ['MEMORIZATION'])
-            if current_acc > past_acc + 0.01:
-                os.environ['P_TICKER'] = 'UP'
-            elif current_acc < past_acc - 0.01:
-                os.environ['P_TICKER'] = 'DOWN'
-            else:
-                os.environ['P_TICKER'] = 'STAY'
+        # V7 : use memorization
+        current_acc = _memo
+        past_acc = float(os.environ['MEMORIZATION'])
+        if current_acc > past_acc + _tolerance:
+            os.environ['P_TICKER'] = 'UP'
+        elif current_acc < past_acc - _tolerance:
+            os.environ['P_TICKER'] = 'DOWN'
+        else:
+            os.environ['P_TICKER'] = 'STAY'
 
             # metric_past = float(os.environ['P_METRIC'])
             # if metric_cur > metric_past + 0.02:
@@ -326,7 +328,7 @@ if __name__ == '__main__':
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
     os.environ['VOCAB_SIZE'] = str(args.v)
     os.environ['SEQ_LEN'] = str(args.n)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v7'
+    os.environ['WANDB_PROJECT'] = args.data + ' - v8'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
@@ -376,8 +378,8 @@ if __name__ == '__main__':
         tokenized_datasets = None
 
         if isinstance(dataset, dict) and ('test' not in dataset.keys()):
-            dataset = dataset['train'].train_test_split(0.01)
-
+            dataset = dataset['train'].train_test_split(0.1)
+            dataset['test'] = dataset['test'].train_test_split(0.01)['test']
         mlm_collator = CustomMLMCollator(tokenizer, args.p)
     else:
         dataset = None

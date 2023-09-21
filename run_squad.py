@@ -23,11 +23,11 @@ parser.add_argument('--split_load', default=None, type=int)
 parser.add_argument('--data', default='squad', required=False, help='default squad')
 parser.add_argument('--split_test', default=0.2, type=float)
 
-parser.add_argument('--chunk_size', default=64, type=int)
+parser.add_argument('--chunk_size', default=512, type=int)
 
 # train
 parser.add_argument('--lr', default=2e-4)
-parser.add_argument('--epochs', default=2, help='num_train_epochs')
+parser.add_argument('--epochs', default=3, help='num_train_epochs')
 parser.add_argument('--wd', default=1e-2, help='weight decay')
 parser.add_argument('--max_steps', type=int, default=20000)
 parser.add_argument('--b_train', default=128, type=int)
@@ -162,7 +162,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     os.environ['CACHE_DIR'] = 'C:/Users/ay011/.cache/huggingface/datasets'
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v6'
+    os.environ['WANDB_PROJECT'] = args.data + ' - v8'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
