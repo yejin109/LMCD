@@ -25,8 +25,14 @@ import itertools
 #
 
 with open('squad_script.bat', 'w') as f:
-    steps = list(range(1, 17))
-    steps = steps[::-1]
-    for i, model_type in itertools.product(steps, ['const', 'step', 'cosine', 'adaMemo', 'adaToken']):
-        f.write(f'python run_squad.py --ckpt ./ckpts/bert-tiny-p20-{model_type}-v8/checkpoint-{(i)*8}000 --logging_steps 20001\n')
+    # steps = list(range(1, 17))
+    # steps = steps[::-1]
+    # steps = list(range(1, 20))[::-1]
+    # models = ['const', 'step', 'cosine', 'adaMemo', 'adaToken']
+
+    steps = list(range(1, 7))[::-1]
+    models = ['adaTokenadaToken']
+
+    for i, model_type in itertools.product(steps, models):
+        f.write(f'python run_squad.py --ckpt ./ckpts/bert-tiny-p20-{model_type}-v8/checkpoint-{i*8}0000 --logging_steps 20001\n')
         # print(f'python run_squad.py --ckpt ./ckpts/bert-tiny-p20-{model_type}-v8/checkpoint-{i*4}000 --logging_steps 20001')

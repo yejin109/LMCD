@@ -14,12 +14,13 @@ from huggingface import CustomTrainer
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_type', default="prajjwal1/bert-tiny")
-parser.add_argument('--ckpt', default=None)
+parser.add_argument('--ckpt', default=None, type=str)
 
 parser.add_argument('--data_type', default='huggingface')
 parser.add_argument('--data', default='bookcorpus', required=False, help='default bookcorpus, wikipedia')
 parser.add_argument('--use_partial_data', default=False, required=False)
 parser.add_argument('--partial_data_size', default=4, type=int, required=False)
+parser.add_argument('--split', default=False, required=False,)
 
 # Synthetic data
 parser.add_argument('--v', default=2, type=int)
@@ -29,12 +30,12 @@ parser.add_argument('--dist', default='SRS',
 parser.add_argument('--seed', default=123, type=int)
 parser.add_argument('--n', default=10, type=int)
 parser.add_argument('--D', default=10000)
-parser.add_argument('--chunk_size', default=128, type=int)
+parser.add_argument('--chunk_size', default=64, type=int)
 
 # train
 parser.add_argument('--lr', default=2e-5)
 parser.add_argument('--wd', default=1e-2)
-parser.add_argument('--epochs', default=1)
+parser.add_argument('--epochs', default=1, type=int)
 parser.add_argument('--b_train', default=128, type=int)
 parser.add_argument('--max_steps', type=int, default=40000)
 
@@ -55,8 +56,8 @@ parser.add_argument('--shard_eval', default=1000, type=int)
 parser.add_argument('--test', default=False, required=False, action=argparse.BooleanOptionalAction)
 
 # Log
-parser.add_argument('--logging_steps', type=int, default=1000)
-parser.add_argument('--save_steps', type=int, default=4000)
+parser.add_argument('--logging_steps', type=int, default=2000)
+parser.add_argument('--save_steps', type=int, default=20000)
 
 
 def train(_model, _dataset, _train_args, _tk, sharding_size=600):
@@ -307,6 +308,7 @@ def compute_metrics(eval_preds, _model, eps=1e-6):
     os.environ['EVAL_CNT'] = str(int(os.environ['EVAL_CNT'])+1)
     os.environ['TOKEN_ACC'] = str(acc_token)
     os.environ['TOKEN_ACC_ORG'] = str(org_acc)
+    os.environ['MEMORIZATION'] = str(_memo)
 
     eval_res = {
         'P_err': p_err,
@@ -328,7 +330,7 @@ if __name__ == '__main__':
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
     os.environ['VOCAB_SIZE'] = str(args.v)
     os.environ['SEQ_LEN'] = str(args.n)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v8'
+    os.environ['WANDB_PROJECT'] = args.data + ' - v9'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
@@ -341,6 +343,7 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
 
     _model_path = args.ckpt if args.ckpt is not None else args.model_type
+    print(_model_path)
     _model_kwargs = {
         '_fast_init': False
     }

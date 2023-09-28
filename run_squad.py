@@ -162,7 +162,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     os.environ['CACHE_DIR'] = 'C:/Users/ay011/.cache/huggingface/datasets'
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
-    os.environ['WANDB_PROJECT'] = args.data + ' - v8'
+    os.environ['WANDB_PROJECT'] = args.data + '1.1 - v8'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
