@@ -16,7 +16,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--seed', default=123, type=int)
 
 parser.add_argument('--model_type', default="prajjwal1/bert-tiny")
-parser.add_argument('--ckpt', default="./ckpts/bert-tiny-p20-const-v6/checkpoint-36000")
+parser.add_argument('--ckpt', default=None)
 
 parser.add_argument('--data_type', default='huggingface')
 parser.add_argument('--split_load', default=None, type=int)
@@ -27,7 +27,7 @@ parser.add_argument('--chunk_size', default=512, type=int)
 
 # train
 parser.add_argument('--lr', default=2e-4)
-parser.add_argument('--epochs', default=3, help='num_train_epochs')
+parser.add_argument('--epochs', default=3, type=int, help='num_train_epochs')
 parser.add_argument('--wd', default=1e-2, help='weight decay')
 parser.add_argument('--max_steps', type=int, default=20000)
 parser.add_argument('--b_train', default=128, type=int)
@@ -37,7 +37,7 @@ parser.add_argument('--b_eval', default=256, type=int)
 parser.add_argument('--shard_eval', default=300, type=int)
 
 # Log
-parser.add_argument('--logging_steps', type=int, default=500)
+parser.add_argument('--logging_steps', type=int, default=1000)
 parser.add_argument('--save_steps', type=int, default=20000)
 
 
@@ -162,7 +162,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     os.environ['CACHE_DIR'] = 'C:/Users/ay011/.cache/huggingface/datasets'
     os.environ['LOGGING_STEP'] = str(args.logging_steps)
-    os.environ['WANDB_PROJECT'] = args.data + '1.1 - v8'
+    os.environ['WANDB_PROJECT'] = args.data + '1.1 - v9'
 
     os.environ['ITERATION_STEP'] = str(0)
     os.environ['EXP_NAME'] = '-'.join(
@@ -174,7 +174,8 @@ if __name__ == '__main__':
 
     np.random.seed(args.seed)
 
-    _model_path = args.model_type
+    # _model_path = args.model_type
+    _model_path = args.ckpt if args.ckpt is not None else args.model_type
     model = AutoModelForQuestionAnswering.from_pretrained(_model_path)
     # model = AutoModelForQuestionAnswering.from_pretrained(args.ckpt)
     tokenizer = AutoTokenizer.from_pretrained(args.model_type)

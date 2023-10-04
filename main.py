@@ -37,7 +37,7 @@ parser.add_argument('--lr', default=2e-5)
 parser.add_argument('--wd', default=1e-2)
 parser.add_argument('--epochs', default=1, type=int)
 parser.add_argument('--b_train', default=128, type=int)
-parser.add_argument('--max_steps', type=int, default=40000)
+parser.add_argument('--max_steps', type=int, default=None)
 
 parser.add_argument('--p', default=.20, type=float)
 parser.add_argument('--ada_token', default=False, required=False, action=argparse.BooleanOptionalAction)

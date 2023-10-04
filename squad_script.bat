@@ -1,6 +1,12 @@
-python run_squad.py --ckpt ./ckpts/bert-tiny-p20-adaTokenadaToken-v8/checkpoint-460000 --logging_steps 20001
-python run_squad.py --ckpt ./ckpts/bert-tiny-p20-adaTokenadaToken-v8/checkpoint-400000 --logging_steps 20001
-python run_squad.py --ckpt ./ckpts/bert-tiny-p20-adaTokenadaToken-v8/checkpoint-320000 --logging_steps 20001
-python run_squad.py --ckpt ./ckpts/bert-tiny-p20-adaTokenadaToken-v8/checkpoint-240000 --logging_steps 20001
-python run_squad.py --ckpt ./ckpts/bert-tiny-p20-adaTokenadaToken-v8/checkpoint-160000 --logging_steps 20001
-python run_squad.py --ckpt ./ckpts/bert-tiny-p20-adaTokenadaToken-v8/checkpoint-80000 --logging_steps 20001
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-step-v9/checkpoint-200000 --logging_steps 1000 --seed 78647 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-step-v9/checkpoint-200000 --logging_steps 1000 --seed 45157 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-step-v9/checkpoint-200000 --logging_steps 1000 --seed 35735 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-step-v9/checkpoint-200000 --logging_steps 1000 --seed 89453 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-cosine-v9/checkpoint-200000 --logging_steps 1000 --seed 78647 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-cosine-v9/checkpoint-200000 --logging_steps 1000 --seed 45157 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-cosine-v9/checkpoint-200000 --logging_steps 1000 --seed 35735 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-cosine-v9/checkpoint-200000 --logging_steps 1000 --seed 89453 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-adaMemo-v9/checkpoint-200000 --logging_steps 1000 --seed 78647 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-adaMemo-v9/checkpoint-200000 --logging_steps 1000 --seed 45157 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-adaMemo-v9/checkpoint-200000 --logging_steps 1000 --seed 35735 --epochs 6
+python run_squad.py --ckpt ./ckpts/bert-tiny-p20-adaMemo-v9/checkpoint-200000 --logging_steps 1000 --seed 89453 --epochs 6

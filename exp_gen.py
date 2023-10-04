@@ -30,9 +30,11 @@ with open('squad_script.bat', 'w') as f:
     # steps = list(range(1, 20))[::-1]
     # models = ['const', 'step', 'cosine', 'adaMemo', 'adaToken']
 
-    steps = list(range(1, 7))[::-1]
-    models = ['adaTokenadaToken']
+    seeds = [78647, 45157, 35735, 89453]
+    steps = list(range(5, 6))[::-1]
+    # models = ['const', , 'adaToken']
+    models = ['step', 'cosine', 'adaMemo']
 
-    for i, model_type in itertools.product(steps, models):
-        f.write(f'python run_squad.py --ckpt ./ckpts/bert-tiny-p20-{model_type}-v8/checkpoint-{i*8}0000 --logging_steps 20001\n')
+    for i, model_type, seed in itertools.product(steps, models, seeds):
+        f.write(f'python run_squad.py --ckpt ./ckpts/bert-tiny-p20-{model_type}-v9/checkpoint-{i*4}0000 --logging_steps 1000 --seed {seed} --epochs 6\n')
         # print(f'python run_squad.py --ckpt ./ckpts/bert-tiny-p20-{model_type}-v8/checkpoint-{i*4}000 --logging_steps 20001')
